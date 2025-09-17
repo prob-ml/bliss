@@ -43,6 +43,7 @@ class Encoder(pl.LightningModule):
         reference_band: int = 2,
         predict_mode_not_samples: bool = True,
         minimalist_conditioning: bool = False,
+        any_order_training: bool = True,
     ):
         """Initializes Encoder.
 
@@ -63,6 +64,7 @@ class Encoder(pl.LightningModule):
             reference_band: band to use for filtering sources
             predict_mode_not_samples: whether to predict mode catalogs rather than sample catalogs
             minimalist_conditioning: whether to condition on only detection history
+            any_order_training: whether to enable any-order training mode
         """
         super().__init__()
 
@@ -82,6 +84,7 @@ class Encoder(pl.LightningModule):
         self.reference_band = reference_band
         self.predict_mode_not_samples = predict_mode_not_samples
         self.minimalist_conditioning = minimalist_conditioning
+        self.any_order_training = any_order_training
 
         # Generate all binary combinations for n^2 elements
         n = 2
@@ -326,12 +329,15 @@ class Encoder(pl.LightningModule):
 
     def _compute_loss(self, batch, logging_name):
         # could use all the mask patterns but memory is tight
-        patterns_to_use = torch.randperm(15)[:4] if self.use_checkerboard else (0,)
-        history_mask_patterns = self.mask_patterns[patterns_to_use, ...]
 
-        loss_mask_patterns = 1 - history_mask_patterns
+        if self.any_order_training:
+            patterns_to_use = torch.randperm(15)[:4] if self.use_checkerboard else (0,)
+            history_mask_patterns = self.mask_patterns[patterns_to_use, ...]
+            loss_mask_patterns = 1 - history_mask_patterns
+            loss = self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns)
+        else:
+            loss = self.compute_sampler_nll(batch)
 
-        loss = self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns)
         loss = loss.sum()
 
         batch_size = batch["images"].size(0)
@@ -377,6 +383,11 @@ class Encoder(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         self._compute_loss(batch, "val")
+
+        nll = self.compute_sampler_nll(batch)
+        batch_size = batch["images"].size(0)
+        self.log("val/nll", nll.sum(), batch_size=batch_size)
+
         self.update_metrics(batch, batch_idx)
 
     def report_metrics(self, metrics, logging_name, show_epoch=False):
@@ -389,8 +400,8 @@ class Encoder(pl.LightningModule):
                     plot_or_none = metric.plot()
                 except NotImplementedError:
                     continue
-                name = f"Epoch:{self.current_epoch}" if show_epoch else ""
-                name = f"{name}/{logging_name} {metric_name}"
+                name = f"Epoch_{self.current_epoch}" if show_epoch else ""
+                name = f"{name}/{logging_name}_{metric_name}"
                 if self.logger and plot_or_none:
                     fig, _axes = plot_or_none
                     self.logger.experiment.add_figure(name, fig)

@@ -213,6 +213,7 @@ encoder:
     n_sampler_colors: 4
     predict_mode_not_samples: true
     minimalist_conditioning: false
+    any_order_training: false
 
 surveys:
     sdss:

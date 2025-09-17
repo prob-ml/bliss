@@ -114,6 +114,10 @@ my_metrics:
         exclude_last_bin: true
         ref_band: 0
 
+decoder:
+    with_noise: true
+    with_dither: false
+
 encoder:
     use_checkerboard: true
     survey_bands: ['r']

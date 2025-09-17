@@ -41,7 +41,7 @@ class TwoPointMetric(Metric):
 
     def compute(self):
         two_pt = (self.obs_neighbors / self.expected_neighbors) - 1
-        return {f"{r}": two_pt[i].item() for i, r in enumerate(self.radii)}
+        return {f"r_{r:.3f}": two_pt[i].item() for i, r in enumerate(self.radii)}
 
     def plot(self):
         two_pt = (self.obs_neighbors / self.expected_neighbors) - 1
