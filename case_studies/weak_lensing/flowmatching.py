@@ -56,6 +56,7 @@ class FlowMatching(pl.LightningModule):
         t_embed_dim: int,
         num_redshift_bins: int,
         velo_net_channels: int,
+        scale_factor: float,
         optimizer_params: Optional[dict] = None,
     ):
         super().__init__()
@@ -72,6 +73,7 @@ class FlowMatching(pl.LightningModule):
         self.t_embed_dim = t_embed_dim
         self.z_dim = 3 * num_redshift_bins  # shear1, shear2, convergence for each bin
         self.velo_net_channels = velo_net_channels
+        self.scale_factor = scale_factor
         self.optimizer_params = optimizer_params
 
         self.initialize_networks()
@@ -115,9 +117,15 @@ class FlowMatching(pl.LightningModule):
         t = torch.rand([x.shape[0], 1], device=x.device)
         t_embedding = self.time_encoder(t)
 
-        shear1 = rearrange(batch["tile_catalog"]["shear_1"], "b h w r -> b r h w")
-        shear2 = rearrange(batch["tile_catalog"]["shear_2"], "b h w r -> b r h w")
-        convergence = rearrange(batch["tile_catalog"]["convergence"], "b h w r -> b r h w")
+        shear1 = self.scale_factor * rearrange(
+            batch["tile_catalog"]["shear_1"], "b h w r -> b r h w"
+        )
+        shear2 = self.scale_factor * rearrange(
+            batch["tile_catalog"]["shear_2"], "b h w r -> b r h w"
+        )
+        convergence = self.scale_factor * rearrange(
+            batch["tile_catalog"]["convergence"], "b h w r -> b r h w"
+        )
         z1 = torch.cat([shear1, shear2, convergence], dim=1)
 
         z0 = torch.randn_like(z1, device=z1.device)

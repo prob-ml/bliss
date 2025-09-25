@@ -42,6 +42,7 @@ encoder:
     t_embed_dim: 8
     num_redshift_bins: 1
     velo_net_channels: 128
+    scale_factor: 100.0
     optimizer_params:
         lr: 1e-4
 
@@ -72,7 +73,7 @@ train:
             _target_: pytorch_lightning.loggers.TensorBoardLogger
             save_dir: ${paths.output}
             name: WeakLensingFlowMatchingDC2
-            version: ${now:%Y-%m-%d_%H-%M}
+            version: scaled_fm_lr001_resnet
             default_hp_metric: false
         reload_dataloaders_every_n_epochs: 0
         check_val_every_n_epoch: 1
