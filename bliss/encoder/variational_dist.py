@@ -142,6 +142,7 @@ class VariationalFactor:
 class BernoulliFactor(VariationalFactor):
     def __init__(self, *args, **kwargs):
         super().__init__(1, *args, **kwargs)
+        self.dim = 1
 
     def get_dist(self, params):
         yes_prob = params.sigmoid().clamp(1e-4, 1 - 1e-4)
@@ -214,6 +215,7 @@ class TDBNFactor(VariationalFactor):
 
     def __init__(self, *args, low_clamp=-6, high_clamp=3, **kwargs):
         super().__init__(4, *args, **kwargs)
+        self.dim = 2
         self.low_clamp = low_clamp
         self.high_clamp = high_clamp
 
