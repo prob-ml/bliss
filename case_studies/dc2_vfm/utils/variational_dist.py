@@ -75,6 +75,14 @@ class VariationalDist(BlissVD):
     @property
     def n_other_chs_per_source(self):
         return sum(self.factor_other_chs)
+    
+    def compute_nll(self, x_cat, true_tile_cat):
+        assert self.factors[0].name == "n_sources"
+        fp_pairs = list(self._factor_param_pairs(x_cat))
+        ns_dist, ns_params = fp_pairs[0]
+        ns_nll = ns_dist.compute_nll(ns_params, true_tile_cat)
+        other_nll = sum(qk.compute_nll(params, true_tile_cat) for qk, params in fp_pairs[1:])
+        return ns_nll, other_nll
 
     def n_sources_mean(self, x_cat_n_sources: torch.Tensor):
         assert self.factors[0].name == "n_sources"

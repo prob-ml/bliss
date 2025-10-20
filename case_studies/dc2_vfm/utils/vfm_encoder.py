@@ -195,9 +195,13 @@ class VFMEncoder(pl.LightningModule):
                                      t=t, 
                                      image=image,
                                      n_sources_x1=n_sources_x1)
-        nll1 = self.variational_dist.compute_nll(x_cat1, true_tile_cat1)
-        nll2 = self.variational_dist.compute_nll(x_cat2, true_tile_cat2)
-        return torch.sum(nll1 + nll2) / (n_sources_x1.sum() * other_x1.shape[-1] + n_sources_x1.numel())
+        ns_nll1, other_nll1 = self.variational_dist.compute_nll(x_cat1, true_tile_cat1)
+        ns_nll2, other_nll2 = self.variational_dist.compute_nll(x_cat2, true_tile_cat2)
+        # return torch.sum(nll1 + nll2) / (n_sources_x1.sum() * other_x1.shape[-1] + n_sources_x1.numel())
+        return {
+            "ns_nll": torch.sum(ns_nll1 + ns_nll2) / n_sources_x1.shape[0],
+            "other_nll": torch.sum(other_nll1 + other_nll2) / n_sources_x1.shape[0],
+        }
 
     def _compute_cur_batch_loss(self, batch):
         target_cat = TileCatalog(batch["tile_catalog"])
@@ -211,18 +215,21 @@ class VFMEncoder(pl.LightningModule):
         # note that we do torch.log(fluxes) in the following steps
         encoded_n_sources1, encoded_other1 = self.variational_dist.tile_cat_to_tensor(target_cat1)  # (b, h, w, k)
         encoded_n_sources2, encoded_other2 = self.variational_dist.tile_cat_to_tensor(target_cat2)  # (b, h, w, k)
-        nll = self._compute_vfm_loss(n_sources_x1=torch.cat([encoded_n_sources1, encoded_n_sources2], dim=-1), 
-                                    other_x1=torch.cat([encoded_other1, encoded_other2], dim=-1),
-                                    image=image,
-                                    true_tile_cat1=target_cat1,
-                                    true_tile_cat2=target_cat2)
-        return nll
+        nll_dict = self._compute_vfm_loss(n_sources_x1=torch.cat([encoded_n_sources1, encoded_n_sources2], dim=-1), 
+                                            other_x1=torch.cat([encoded_other1, encoded_other2], dim=-1),
+                                            image=image,
+                                            true_tile_cat1=target_cat1,
+                                            true_tile_cat2=target_cat2)
+        return nll_dict
 
     def _compute_loss(self, batch, logging_name):
-        nll = self._compute_cur_batch_loss(batch)
+        nll_dict = self._compute_cur_batch_loss(batch)
         batch_size = batch["images"].size(0)
-        self.log(f"{logging_name}/_loss", nll.item(), batch_size=batch_size, sync_dist=True)
-        return nll
+        self.log(f"{logging_name}/_ns_nll", nll_dict["ns_nll"].item(), batch_size=batch_size, sync_dist=True)
+        self.log(f"{logging_name}/_other_nll", nll_dict["other_nll"].item(), batch_size=batch_size, sync_dist=True)
+        loss = nll_dict["ns_nll"] + nll_dict["other_nll"]
+        self.log(f"{logging_name}/_loss", loss.item(), batch_size=batch_size, sync_dist=True)
+        return loss
 
     def on_fit_start(self):
         GlobalEnv.current_encoder_epoch = self.current_epoch
