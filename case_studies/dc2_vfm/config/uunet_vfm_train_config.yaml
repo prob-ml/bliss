@@ -1,0 +1,119 @@
+---
+defaults:
+    - ../../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: train
+
+surveys:
+  dc2:
+    batch_size: 128
+    train_transforms:
+      # - _target_: bliss.data_augmentation.RotateFlipTransform
+      - _target_: bliss.data_augmentation.RandomShiftTransform
+        tile_slen: ${surveys.dc2.tile_slen}
+        max_sources_per_tile: ${surveys.dc2.max_sources_per_tile}
+      - _target_: bliss.cached_dataset.FluxFilterTransform
+        reference_band: 2
+        min_flux: 100
+    nontrain_transforms:
+      - _target_: bliss.cached_dataset.FluxFilterTransform
+        reference_band: 2  
+        min_flux: 100
+
+my_variational_factors:
+  - _target_: case_studies.dc2_vfm.utils.variational_dist.BernoulliFactor
+    name: n_sources
+    sample_rearrange: null
+    nll_rearrange: null
+    nll_gating: null
+  - _target_: bliss.encoder.variational_dist.TDBNFactor
+    name: locs
+    sample_rearrange: b ht wt d -> b ht wt 1 d
+    nll_rearrange: b ht wt 1 d -> b ht wt d
+    nll_gating:
+      _target_: bliss.encoder.variational_dist.SourcesGating
+  - _target_: case_studies.dc2_vfm.utils.variational_dist.NormalLogFluxFactor
+    name: fluxes
+    dim: 6
+    sample_rearrange: b ht wt d -> b ht wt 1 d
+    nll_rearrange: b ht wt 1 d -> b ht wt d
+    nll_gating:
+      _target_: bliss.encoder.variational_dist.SourcesGating
+
+my_metrics:
+  detection_performance:
+    _target_: case_studies.dc2_vfm.utils.metrics.DetectionPerformance
+  flux_error:
+    _target_: bliss.encoder.metrics.FluxError
+    survey_bands: ${encoder.survey_bands}
+    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+    mag_zero_point: 3631e9  # for DC2
+    report_bin_unit: mag
+    ref_band: 2
+  asymmetric_cm:
+    _target_: case_studies.dc2_vfm.utils.metrics.AsymmetricCM
+    max_n_sources: 2
+    locs_bin_boundaries: [0.0, 0.25, 0.5, 0.75, 1.0]
+    flux_bin_boundaries: [21.0, 22.2, 23.4, 24.6, 25.8]
+    flux_bands: ${encoder.survey_bands}
+
+my_image_normalizers:
+  clahe:
+    _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+    min_stdev: 200
+  asinh:
+    _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+    q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+encoder:
+    _target_: case_studies.dc2_vfm.utils.vfm_encoder.VFMEncoder
+    survey_bands: [u, g, r, i, z, y]
+    reference_band: 2
+    tile_slen: ${surveys.dc2.tile_slen}
+    image_size: [80, 80]
+    image_normalizers: ${my_image_normalizers}
+    variational_dist:
+        _target_: case_studies.dc2_vfm.utils.variational_dist.VariationalDist
+        tile_slen: ${surveys.dc2.tile_slen}
+        factors: ${my_variational_factors}
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 1.0
+        mag_slack: null
+        mag_band: 2  # r-band
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        compute_groups: false
+        metrics: ${my_metrics}
+    acc_grad_batches: 1
+    optimizer_params:
+        lr: 1e-3
+        amsgrad: true  # to make adam more stable
+    scheduler_params:
+        milestones: [300, 380]
+        gamma: 0.1
+
+train:
+    trainer:
+        logger:
+            name: DC2_vfm_exp
+            version: null  # change it before running the code
+        devices: null  # change it before running the code
+        use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
+        precision: 32-true
+        max_epochs: 400
+    data_source: ${surveys.dc2}
+    pretrained_weights: null
+    seed: 7272
+    callbacks:
+        schedule_checkpointing:
+            _target_: pytorch_lightning.callbacks.ModelCheckpoint
+            filename: "schedule_saved_encoder_{epoch:03d}"
+            save_top_k: -1
+            every_n_epochs: 50
+            verbose: true
+            save_on_train_epoch_end: true
+            auto_insert_metric_name: false
