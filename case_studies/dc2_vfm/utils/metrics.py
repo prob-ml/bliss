@@ -1,4 +1,5 @@
 import torch
+import torch.distributed
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -173,6 +174,12 @@ class DetectionPerformance(FilterMetric):
         }
     
 
+def _is_global_zero():
+    return (not torch.distributed.is_available()) or \
+           (not torch.distributed.is_initialized()) or \
+           (torch.distributed.get_rank() == 0)
+    
+
 class AsymmetricCM(Metric):
     def __init__(
         self,
@@ -215,7 +222,7 @@ class AsymmetricCM(Metric):
         
         font_size = 10
         plt.rcParams.update({
-            "text.usetex": True,
+            "text.usetex": False,
             "font.family": "serif",
             "font.size": font_size,
             "axes.labelsize": font_size,
@@ -362,6 +369,9 @@ class AsymmetricCM(Metric):
 
     def compute(self):
         self._refresh_flux_cms()
+
+        if not _is_global_zero():
+            return {}
 
         fig_dict = {}
         fig_dict["ns_cm_fig"] = self.make_factor_matrix_plot(self.n_sources_cm.cpu(),
