@@ -27,6 +27,11 @@ class BernoulliFactor(VariationalFactor):
         return MyBernoulli(yes_prob)
     
 
+class MyLogNormal(dist.Normal):
+    def log_prob(self, value):
+        return super().log_prob(torch.log(value.clip(min=1.0)))
+    
+
 class NormalLogFluxFactor(VariationalFactor):
     def __init__(self, *args, dim=6, **kwargs):
         self.dim = dim  # the dimension of a multivariate normal
@@ -38,7 +43,7 @@ class NormalLogFluxFactor(VariationalFactor):
         sigma = params[:, :, :, self.dim : self.n_params].clamp(-20, 15).exp().sqrt()
         assert not mu.isnan().any() and not mu.isinf().any(), "mu contains invalid values"
         assert not sigma.isnan().any() and not sigma.isinf().any(), "sigma contains invalid values"
-        iid_dist = dist.Normal(loc=mu, scale=sigma)
+        iid_dist = MyLogNormal(loc=mu, scale=sigma)
         return dist.Independent(iid_dist, 1)
 
 
