@@ -179,8 +179,10 @@ class UShapeHead(nn.Module):
             nn.SiLU(),
             nn.Conv2d(c20, c20, kernel_size=1),
             nn.SiLU(),
-            nn.Conv2d(c20, x_out_ch, kernel_size=1),
         )
+        self.final_layer = nn.Conv2d(c20, x_out_ch, kernel_size=1)
+        nn.init.constant_(self.final_layer.weight, 0.0)
+        nn.init.constant_(self.final_layer.bias, 0.0)
 
     def forward(self, xt, t, img_cond):
         """
@@ -216,7 +218,7 @@ class UShapeHead(nn.Module):
         u2 = self.u20_2(u2, t_emb, img_cond["20"])
 
         out = self.out_conv(self.out_act(self.out_norm(u2)))
-        return out
+        return self.final_layer(out)
 
 
 class UUNet(nn.Module):
