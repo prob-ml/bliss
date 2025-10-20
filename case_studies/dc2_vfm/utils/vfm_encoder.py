@@ -105,19 +105,19 @@ class VFMEncoder(pl.LightningModule):
                                device=image.device)
         
         if ode_config_dict is None:
-            # ode_config_dict = {
-            #     "method": "dopri5",
-            #     "atol": 1e-4,
-            #     "rtol": 1e-4,
-            #     "t": torch.linspace(0, 0.999, 2, device=self.device),
-            # }
             ode_config_dict = {
-                "method": "euler",
-                "options": {"step_size": 0.01},
+                "method": "dopri5",
                 "atol": 1e-4,
                 "rtol": 1e-4,
-                "t": torch.linspace(0, 0.99, 2, device=self.device),
+                "t": torch.linspace(0, 0.999, 2, device=self.device),
             }
+            # ode_config_dict = {
+            #     "method": "euler",
+            #     "options": {"step_size": 0.01},
+            #     "atol": 1e-4,
+            #     "rtol": 1e-4,
+            #     "t": torch.linspace(0, 0.99, 2, device=self.device),
+            # }
         
         self.my_net.enter_fast_inference()
         
