@@ -125,6 +125,11 @@ class WeakLensingEncoder(Encoder):
 
         return loss
 
+    def validation_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        self._compute_loss(batch, "val")
+        self.update_metrics(batch, batch_idx)
+
     def on_after_backward(self):
         total_grad_norm = 0.0
         for _, param in self.named_parameters():
