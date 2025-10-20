@@ -15,14 +15,16 @@ class WeakLensingNet(nn.Module):
         ch_init,
         ch_max,
         ch_final,
-        n_var_params,
         initial_downsample,
         more_up_layers,
         num_bottleneck_layers,
+        map_to_var_params=True,
+        n_var_params=None,
     ):
         super().__init__()
 
-        ch_final = max(ch_final, 2 ** math.ceil(math.log2(n_var_params)))
+        if n_var_params is not None:
+            ch_final = max(ch_final, 2 ** math.ceil(math.log2(n_var_params)))
 
         res_midpoint = int(math.sqrt(n_pixels_per_side * n_tiles_per_side))
 
@@ -46,7 +48,10 @@ class WeakLensingNet(nn.Module):
 
         self.resnet_blocks = nn.ModuleList(layers)
 
-        self.final_layer = Map(ch_final, n_var_params)
+        if map_to_var_params:
+            self.final_layer = Map(ch_final, n_var_params)
+        else:
+            self.final_layer = None
 
     def _make_layers(
         self,
@@ -111,6 +116,7 @@ class WeakLensingNet(nn.Module):
         for block in self.resnet_blocks:
             x = block(x)
 
-        x = self.final_layer(x)
+        if self.final_layer is not None:
+            x = self.final_layer(x)
 
         return x
