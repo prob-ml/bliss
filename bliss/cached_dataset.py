@@ -156,7 +156,7 @@ class ChunkingDataset(Dataset):
                     )
                     logger.warning(warning_msg)
                 with open(file_path, "rb") as f:
-                    cached_data_len = len(torch.load(f))
+                    cached_data_len = len(torch.load(f, weights_only=False))
 
             if i == 0:
                 self.accumulated_file_sizes[i] = cached_data_len
@@ -177,7 +177,7 @@ class ChunkingDataset(Dataset):
         if self.buffered_file_index != converted_index:
             self.buffered_file_index = converted_index
             with open(self.file_paths[converted_index], "rb") as f:
-                self.buffered_data = torch.load(f)
+                self.buffered_data = torch.load(f, weights_only=False)
         output_data = self.buffered_data[converted_sub_index]
         return self.transform(output_data)
 
