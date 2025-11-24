@@ -60,8 +60,7 @@ class RandomShiftTransform(torch.nn.Module):
         img = torch.roll(img, shifts=horizontal_shift, dims=2)
         datum_out["images"] = img
 
-        d = {k: v.unsqueeze(0) for k, v in datum["tile_catalog"].items()}
-        tile_cat = TileCatalog(d)
+        tile_cat = TileCatalog.from_dict(datum["tile_catalog"])
         full_cat = tile_cat.to_full_catalog(self.tile_slen)
 
         full_cat["plocs"][:, :, 0] += vertical_shift
@@ -70,7 +69,6 @@ class RandomShiftTransform(torch.nn.Module):
         aug_tile = full_cat.to_tile_catalog(
             self.tile_slen, self.max_sources_per_tile, filter_oob=True
         )
-        d_out = {k: v.squeeze(0) for k, v in aug_tile.items()}
-        datum_out["tile_catalog"] = d_out
+        datum_out["tile_catalog"] = aug_tile.to_dict()
 
         return datum_out

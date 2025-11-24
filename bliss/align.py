@@ -1,17 +1,23 @@
 import numpy as np
+from numpy import ndarray
 from reproject import reproject_interp
 
 
-def align(img, wcs_list, ref_band, ref_depth=0):
-    """Reproject images based on some reference WCS for pixel alignment."""
+def align(img: ndarray, wcs_list, ref_band: int, ref_depth: int = 0) -> ndarray:
+    """Reproject images based on some reference WCS for pixel alignment.
+
+    Args:
+        img: 4D array of shape (coadd_depth, n_bands, h, w)
+        wcs_list: list of lists, wcs_list[d][b] is the WCS for depth d, band b
+        ref_band: reference band for alignment
+        ref_depth: reference depth for alignment
+
+    Returns:
+        Reprojected images as 4D array of shape (coadd_depth, n_bands, h, w)
+    """
     reproj_d = {}
     footprint_d = {}
 
-    # coerce to 4D with coadd_depth trivially 1
-    if img.ndim == 3:
-        img = np.expand_dims(img, axis=0)
-    if not isinstance(wcs_list[0], list):
-        wcs_list = [wcs_list]
     coadd_depth, n_bands, h, w = img.shape
 
     # align with (`ref_depth`, `ref_band`) WCS
@@ -41,6 +47,4 @@ def align(img, wcs_list, ref_band, ref_depth=0):
             cropped[np.isnan(cropped)] = 0
             reproj_out[(d, bnd)] = cropped
 
-    if reproj_out.shape[0] == 1:
-        reproj_out = reproj_out.squeeze(axis=0)
     return np.float32(reproj_out)
