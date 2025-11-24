@@ -10,31 +10,17 @@ Bayesian Light Source Separator (BLISS)
 
 # Introduction
 
-BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides
-  - __Accurate estimation__ of parameters in crowded fields with overlapping sources.
-  - __Calibrated uncertainties__ through fitting an approximate Bayesian posterior.
-  - __Scalability__ of Bayesian inference to large astronomical surveys (SDSS, DES, DC2/LSST).
+BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides:
+  - __Accurate estimation__ of parameters in crowded fields with overlapping sources
+  - __Calibrated uncertainties__ through fully Bayesian inference via neural posterior estimation (NPE)
+  - __Scalability__ to petabyte-scale surveys containing billions of celestial objects
 
-# Why BLISS?
-
-Astronomical cataloging is a mathematically ill-posed problem, meaning traditional deterministic pipelines produce statistically incoherent results without calibrated uncertainties. BLISS addresses this fundamental limitation by providing fully Bayesian inference through neural posterior estimation.
-
-**Performance**: BLISS systematically outperforms standard survey pipelines (including LSST's) for light source detection, flux measurement, star/galaxy classification, and galaxy shape measurement.
-
-**Scalability**: BLISS scales to petabyte-scale surveys containing billions of celestial objects, having achieved state-of-the-art results on SDSS, DES, and DC2 simulations.
-
-BLISS uses neural posterior estimation (NPE), a form of simulation-based inference (SBI), with techniques including
-  - __Amortized inference__, in which a neural network maps telescope images to an approximate Bayesian posterior on parameters of interest.
-  - __Autoregressive tiling__ with K-color checkerboard patterns that align the variational distribution's conditional dependencies with the true posterior, greatly improving calibration.
-
-Beyond basic cataloging, BLISS supports multiple downstream scientific applications:
-  - __Weak gravitational lensing__ - shear and convergence estimation.
-  - __Photometric redshifts (BLISS-PZ)__ - direct redshift prediction from images with multiple variational families.
-  - __Galaxy cluster detection__ - cluster membership prediction validated on DES data.
+BLISS uses neural posterior estimation (NPE), a form of simulation-based inference in which a neural network maps telescope images directly to an approximate Bayesian posterior. BLISS uses autoregressive tiling with checkerboard patterns that align the variational distribution's conditional dependencies with the true posterior, improving calibration.
+BLISS systematically outperforms standard survey pipelines for light source detection, flux measurement, star/galaxy classification, and galaxy shape measurement.
 
 # Installation
 
-**Requirements:** Python 3.10 or higher
+**Requirements:** Python 3.12 or higher
 
 BLISS is pip installable with the following command:
 
@@ -70,9 +56,7 @@ git clone git@github.com:prob-ml/bliss.git
 
 ```bash
 cd bliss
-export POETRY_VIRTUALENVS_IN_PROJECT=1
 poetry install
-poetry shell
 ```
 
 6. Verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
@@ -102,52 +86,17 @@ bliss mode={generate,train,predict} [config options]
 
 Configuration files are located in `bliss/conf/` and can be composed and overridden via command line arguments. See the [documentation](https://prob-ml.github.io/bliss/) for details.
 
-# Latest updates
-
-## Weak Gravitational Lensing (2024)
-   - Shear (γ) and convergence (κ) parameter estimation
-   - Extensive validation on DC2 and DECaLS weak lensing simulation (descwl)
-   - Redshift-binned analysis for tomographic weak lensing studies
-   - Custom encoder architecture optimized for shear estimation
-
-## Photometric Redshifts (2024)
-   - BLISS-PZ: Direct photo-z estimation from multi-band images
-   - Multiple variational families: discrete categorical, continuous, B-spline basis, mixture density networks
-   - Competitive performance with RAIL pipeline methods
-   - Integration with DC2 redshift data
-
-## Galaxy Cluster Detection (2024)
-   - Cluster membership prediction from DES DR2 data
-   - Validated against redMaPPer cluster catalog
-   - Full inference capability over large survey volumes
-
-## Cataloging Improvements
-   - Support for multiple surveys: SDSS, DES, DC2/LSST
-   - Autoregressive tiling for efficient large-image processing
-   - Spatially varying PSF and background handling
-   - Rich catalog system with WCS support and coordinate transformations
-
-## Stars and Galaxies
-   - BLISS includes StarNet functionality for crowded star fields
-   - Parametric galaxy model (bulge + disk) for realistic galaxy rendering
-   - Detection, measurement, and deblending of both stars and galaxies
-
 # Case Studies
 
 The `case_studies/` directory contains research applications of BLISS:
 
-- **weak_lensing/** - Shear and convergence estimation
+- **weak_lensing/** - Shear (γ) and convergence (κ) estimation, validated on DC2 and DECaLS simulations
 - **redshift/** - Photo-z estimation (BLISS-PZ) with multiple variational families
-- **galaxy_clustering/** - Galaxy cluster detection and membership prediction
+- **galaxy_clustering/** - Galaxy cluster detection and membership prediction, validated on DES DR2
 - **dc2_cataloging/** - Full cataloging pipeline for DC2 simulation
-- **dc2_multidetection/** - Multi-detection strategies for DC2
 - **strong_lensing/** - Strong gravitational lens detection
-- **spatial_tiling/** - Tiling strategies for large images
+- **spatial_tiling/** - Spatially autoregressive tiling
 - **psf_variation/** - Handling spatially varying PSFs
-- **prior_elicitation/** - Methods for specifying priors
-- **multiband/** - Multi-band image processing
-
-Each case study includes training scripts, configuration files, and evaluation notebooks.
 
 # References
 
