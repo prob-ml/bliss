@@ -3,7 +3,6 @@
 
 Bayesian Light Source Separator (BLISS)
 ========================================
-[![](https://img.shields.io/badge/docs-master-blue.svg)](https://prob-ml.github.io/bliss/)
 [![tests](https://github.com/prob-ml/bliss/workflows/tests/badge.svg)](https://github.com/prob-ml/bliss/actions/workflows/tests.yml)
 [![codecov.io](https://codecov.io/gh/prob-ml/bliss/branch/master/graphs/badge.svg?branch=master&token=Jgzv0gn3rA)](http://codecov.io/github/prob-ml/bliss?branch=master)
 [![PyPI](https://img.shields.io/pypi/v/bliss-toolkit.svg)](https://pypi.org/project/bliss-toolkit)
@@ -84,7 +83,7 @@ bliss mode={generate,train,predict} [config options]
 - `mode=train` - Train encoder networks on simulated or real data
 - `mode=predict` - Run inference on astronomical images to produce catalogs
 
-Configuration files are located in `bliss/conf/` and can be composed and overridden via command line arguments. See the [documentation](https://prob-ml.github.io/bliss/) for details.
+Configuration files are located in `bliss/conf/` and can be composed and overridden via command line arguments.
 
 # Case Studies
 
