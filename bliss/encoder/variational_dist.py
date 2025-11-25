@@ -1,4 +1,3 @@
-import logging
 from abc import ABC, abstractmethod
 
 import torch
@@ -91,27 +90,7 @@ class VariationalFactor:
         self.n_params = n_params
         self.sample_rearrange = sample_rearrange
         self.nll_rearrange = nll_rearrange
-        if nll_gating is None:
-            self.nll_gating = NullGating()
-        elif isinstance(nll_gating, str):
-            self.nll_gating = self._get_nll_gating_instance(nll_gating)
-        elif issubclass(type(nll_gating), NllGating):
-            self.nll_gating = nll_gating
-        else:
-            raise TypeError("invalid nll_gating type")
-
-    # to be compatible with the old yaml files
-    def _get_nll_gating_instance(self, nll_gating: str):
-        logger = logging.getLogger("VariationalFactor")
-        warning_msg = "WARNING: please don't use str as nll_gating; it will be deprecated"
-        logger.warning(warning_msg)
-        if nll_gating == "n_sources":
-            return SourcesGating()
-        if nll_gating == "is_star":
-            return StarGating()
-        if nll_gating == "is_galaxy":
-            return GalaxyGating()
-        raise ValueError("invalide nll_gating string")
+        self.nll_gating = nll_gating if nll_gating is not None else NullGating()
 
     def sample(self, params, use_mode=False):
         qk = self.get_dist(params)

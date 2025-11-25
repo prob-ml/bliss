@@ -4,7 +4,7 @@
 # Directory containing image batch files
 image_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_star_max_100_draw_bright
 
-# Directory containing catalog batch files  
+# Directory containing catalog batch files
 catalog_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_star_max_100_draw_bright
 
 # File patterns to match batch files

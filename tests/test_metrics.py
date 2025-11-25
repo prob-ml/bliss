@@ -109,7 +109,7 @@ class TestMetrics:
     def test_self_agreement(self, cfg):
         """Test galaxy classification metrics on full catalog."""
         with open(f"{cfg.paths.test_data}/multiband_data/dataset_0.pt", "rb") as f:
-            data = torch.load(f)
+            data = torch.load(f, weights_only=False)
         multiband_dataloader = DataLoader(data, batch_size=8, shuffle=False)
 
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]

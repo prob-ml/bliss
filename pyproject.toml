@@ -8,19 +8,22 @@ name = "bliss-toolkit"
 packages = [{include = "bliss"}]
 readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
-version = "0.4"
+version = "0.41"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.12"
+# PyTorch with CUDA 12.8 support (includes cuDNN)
+# Works on both older GPUs (RTX 2080 Ti) and Blackwell GPUs (RTX 5090)
+# Check CUDA version: nvidia-smi
+torch = {version = "^2.7.0", source = "pytorch-cu128"}
+torchvision = {version = "^0.22.0", source = "pytorch-cu128"}
 numpy = ">=1.18.5"
 scipy = ">=1.4.1"
 matplotlib = ">=3.3.3"
 requests = "^2.31.0"
-torch = "^2.3.1"
-torchvision = "^0.18.1"
 torchmetrics = "^1.4.0.post0"
 lightning = {extras = ["extra"], version = "^2.3.3"}
 einops = "^0.8.0"
@@ -77,6 +80,11 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 100
+
+[[tool.poetry.source]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+priority = "supplemental"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

@@ -28,7 +28,7 @@ class TestGenerate:
 
         # cursory check of contents of cached dataset
         with open(file_path, "rb") as f:
-            cached_dataset = torch.load(f)
+            cached_dataset = torch.load(f, weights_only=False)
             assert isinstance(cached_dataset, list), "cached_dataset must be a list"
             assert isinstance(
                 cached_dataset[0], dict

@@ -223,7 +223,7 @@ class Decoder(nn.Module):
         image /= rearrange(avg_nelec_conv, "bands -> bands 1 1")
 
         if self.with_dither:
-            image = align(image, [wcs_list], self.survey.align_to_band)
+            image = align(image[None], [wcs_list], self.survey.align_to_band)[0]
 
         return torch.from_numpy(image), frame["psf_params"]
 

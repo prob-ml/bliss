@@ -395,16 +395,15 @@ class Encoder(pl.LightningModule):
             self.log(f"{logging_name}/{k}", v, sync_dist=True)
 
         for metric_name, metric in metrics.items():
-            if hasattr(metric, "plot"):  # noqa: WPS421
-                try:
-                    plot_or_none = metric.plot()
-                except NotImplementedError:
-                    continue
+            try:
+                plot_or_none = metric.plot()
+            except NotImplementedError:
+                continue
+            if self.logger and plot_or_none:
                 name = f"Epoch_{self.current_epoch}" if show_epoch else ""
                 name = f"{name}/{logging_name}_{metric_name}"
-                if self.logger and plot_or_none:
-                    fig, _axes = plot_or_none
-                    self.logger.experiment.add_figure(name, fig)
+                fig, _axes = plot_or_none
+                self.logger.experiment.add_figure(name, fig)
 
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
