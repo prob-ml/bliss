@@ -188,14 +188,14 @@ class TestDC2:
                 "name": "locs",
                 "sample_rearrange": "b ht wt d -> b ht wt 1 d",
                 "nll_rearrange": "b ht wt 1 d -> b ht wt d",
-                "nll_gating": "n_sources",
+                "nll_gating": {"_target_": "bliss.encoder.variational_dist.SourcesGating"},
             },
             {
                 "_target_": "bliss.encoder.variational_dist.BernoulliFactor",
                 "name": "source_type",
                 "sample_rearrange": "b ht wt -> b ht wt 1 1",
                 "nll_rearrange": "b ht wt 1 1 -> b ht wt",
-                "nll_gating": "n_sources",
+                "nll_gating": {"_target_": "bliss.encoder.variational_dist.SourcesGating"},
             },
             {
                 "_target_": "bliss.encoder.variational_dist.LogNormalFactor",
@@ -203,7 +203,7 @@ class TestDC2:
                 "dim": 6,
                 "sample_rearrange": "b ht wt d -> b ht wt 1 d",
                 "nll_rearrange": "b ht wt 1 d -> b ht wt d",
-                "nll_gating": "n_sources",
+                "nll_gating": {"_target_": "bliss.encoder.variational_dist.SourcesGating"},
             },
         ]
 

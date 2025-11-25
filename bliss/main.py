@@ -99,7 +99,7 @@ def train(train_cfg: DictConfig):
 
     # load pretrained weights
     if train_cfg.pretrained_weights is not None:
-        enc_state_dict = torch.load(train_cfg.pretrained_weights)
+        enc_state_dict = torch.load(train_cfg.pretrained_weights, weights_only=False)
         if train_cfg.pretrained_weights.endswith(".ckpt"):
             enc_state_dict = enc_state_dict["state_dict"]
         encoder.load_state_dict(enc_state_dict)
@@ -115,7 +115,7 @@ def train(train_cfg: DictConfig):
     # test!
     # load best model for test
     best_model_path = callbacks["checkpointing"].best_model_path
-    enc_state_dict = torch.load(best_model_path)
+    enc_state_dict = torch.load(best_model_path, weights_only=False)
     enc_state_dict = enc_state_dict["state_dict"]
     encoder.load_state_dict(enc_state_dict)
     trainer.test(encoder, datamodule=dataset)
@@ -126,7 +126,9 @@ def train(train_cfg: DictConfig):
 
 def predict(predict_cfg):
     encoder = instantiate(predict_cfg.encoder)
-    enc_state_dict = torch.load(predict_cfg.weight_save_path, map_location=predict_cfg.device)
+    enc_state_dict = torch.load(
+        predict_cfg.weight_save_path, map_location=predict_cfg.device, weights_only=False
+    )
     if predict_cfg.weight_save_path.endswith(".ckpt"):
         enc_state_dict = enc_state_dict["state_dict"]
     encoder.load_state_dict(enc_state_dict)

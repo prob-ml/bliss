@@ -1,18 +1,39 @@
 Installation Guide
 ===================
 
-1. To use and install `bliss` you first need to install `poetry <https://python-poetry.org/docs/>`_.
+Quick Install
+#############
 
-2. Then, install the `fftw <http://www.fftw.org>`_ library (which is used by `galsim`). For example, in unix you can simply do::
+**Requirements:** Python 3.12 or higher
+
+BLISS is pip installable::
+
+    pip install bliss-toolkit
+
+Developer Installation
+######################
+
+1. Install `poetry <https://python-poetry.org/docs/>`_.
+
+2. Install the `fftw <http://www.fftw.org>`_ library (used by galsim)::
 
     sudo apt-get install libfftw3-dev
 
-3. If everything is installed correctly you should be able to run the commands below. This will create a poetry environment that contains only the `bliss` dependencies.::
+3. Install git-lfs if you haven't already::
 
-    git clone https://github.com/prob-ml/bliss.git
+    git-lfs install
+
+4. Clone the repo and install dependencies::
+
+    git clone git@github.com:prob-ml/bliss.git
     cd bliss
-    export POETRY_VIRTUALENVS_IN_PROJECT=1
     poetry install
-    poetry shell
 
-4. Finally, set an environment variable called :code:`BLISS_HOME` to the absolute path of the bliss directory.
+5. Verify installation by running tests::
+
+    pytest
+    pytest --gpu
+
+6. (Optional) Install pre-commit hooks for development::
+
+    pre-commit install

@@ -58,7 +58,10 @@ disable=too-many-ancestors,
 	unnecessary-lambda-assignment,
 
 	# too many false positives
-	no-member, maybe-no-member, no-value-for-parameter
+	no-member, maybe-no-member, no-value-for-parameter,
+
+	# false positive when subscripting numpy arrays returned from functions
+	unsubscriptable-object
 
 
 [SIMILARITIES]

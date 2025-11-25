@@ -10,12 +10,10 @@ from einops import rearrange, reduce, repeat
 from torch import Tensor
 
 
-# old function, to be deleted
 def convert_mag_to_nmgy(mag):
     return 10 ** ((22.5 - mag) / 2.5)
 
 
-# old function, to be deleted
 def convert_nmgy_to_mag(nmgy):
     return 22.5 - 2.5 * torch.log10(nmgy)
 
@@ -60,7 +58,6 @@ class BaseTileCatalog(UserDict):
         super().__setitem__(key, item)
 
     def _validate(self, x: Tensor):
-        assert isinstance(x, Tensor)
         assert x.shape[:3] == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
         assert x.device == self.device
 
@@ -130,6 +127,15 @@ class TileCatalog(BaseTileCatalog):
         assert "locs" in d
         assert len(d["locs"].shape) == 5
         super().__init__(d)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Tensor]) -> "TileCatalog":
+        """Create TileCatalog from unbatched dict by adding batch dimension."""
+        return cls({k: v.unsqueeze(0) for k, v in d.items()})
+
+    def to_dict(self) -> Dict[str, Tensor]:
+        """Convert to unbatched dict by removing batch dimension."""
+        return {k: v.squeeze(0) for k, v in self.items()}
 
     def __getitem__(self, name: str):
         # a temporary hack until we stop storing galaxy_params as an array
@@ -430,12 +436,20 @@ class FullCatalog(UserDict):
 
         super().__init__(**d)
 
+    @classmethod
+    def from_dict(cls, height: int, width: int, d: Dict[str, Tensor]) -> "FullCatalog":
+        """Create FullCatalog from unbatched dict by adding batch dimension."""
+        return cls(height, width, {k: v.unsqueeze(0) for k, v in d.items()})
+
+    def to_dict(self) -> Dict[str, Tensor]:
+        """Convert to unbatched dict by removing batch dimension."""
+        return {k: v.squeeze(0) for k, v in self.items()}
+
     def __setitem__(self, key: str, item: Tensor) -> None:
         self._validate(item)
         super().__setitem__(key, item)
 
     def _validate(self, x: Tensor):
-        assert isinstance(x, Tensor)
         assert x.shape[0] == self.batch_size
         assert x.device == self.device
 
