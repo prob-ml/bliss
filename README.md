@@ -3,7 +3,7 @@
 
 Bayesian Light Source Separator (BLISS)
 ========================================
-[![pipeline status](https://gitlab.com/prob-ml/bliss/badges/master/pipeline.svg)](https://gitlab.com/prob-ml/bliss/-/pipelines)
+[![tests](https://github.com/prob-ml/bliss/workflows/tests/badge.svg)](https://github.com/prob-ml/bliss/actions/workflows/tests.yml)
 [![codecov.io](https://codecov.io/gh/prob-ml/bliss/branch/master/graphs/badge.svg?branch=master&token=Jgzv0gn3rA)](http://codecov.io/github/prob-ml/bliss?branch=master)
 [![PyPI](https://img.shields.io/pypi/v/bliss-toolkit.svg)](https://pypi.org/project/bliss-toolkit)
 
@@ -99,11 +99,11 @@ The `case_studies/` directory contains research applications of BLISS:
 
 # References
 
-Yicun Duan, Xinyue Li, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Collaboration. [Neural posterior estimation for cataloging astronomical images from the Legacy Survey of Space and Time](https://arxiv.org/abs/2510.15315). arXiv:2510.15315. 2024. [[code](https://github.com/prob-ml/bliss)]
+Yicun Duan, Xinyue Li, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Collaboration. [Neural posterior estimation for cataloging astronomical images from the Legacy Survey of Space and Time](https://arxiv.org/abs/2510.15315). arXiv:2510.15315. 2025.
 
-Jeffrey Regier. [Neural posterior estimation with autoregressive tiling for detecting objects in astronomical images](https://arxiv.org/abs/2510.03074). arXiv:2510.03074. 2024. [[code](https://github.com/prob-ml/bliss)]
+Jeffrey Regier. [Neural posterior estimation with autoregressive tiling for detecting objects in astronomical images](https://arxiv.org/abs/2510.03074). arXiv:2510.03074. 2025.
 
-Aakash Patel, Tianqing Zhang, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Science Collaboration. [Neural posterior estimation for cataloging astronomical images with spatially varying backgrounds and point spread functions](https://doi.org/10.3847/1538-3881/ad5e6e). The Astronomical Journal. 2024. [[code](https://github.com/prob-ml/bliss)]
+Aakash Patel, Tianqing Zhang, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Science Collaboration. [Neural posterior estimation for cataloging astronomical images with spatially varying backgrounds and point spread functions](https://iopscience.iop.org/article/10.3847/1538-3881/adef32). The Astronomical Journal. 2025.
 
 Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. [Variational inference for deblending crowded starfields](https://www.jmlr.org/papers/volume24/21-0169/21-0169.pdf). Journal of Machine Learning Research. 2023.
 
