@@ -3,7 +3,7 @@
 
 Bayesian Light Source Separator (BLISS)
 ========================================
-[![tests](https://github.com/prob-ml/bliss/workflows/tests/badge.svg)](https://github.com/prob-ml/bliss/actions/workflows/tests.yml)
+[![pipeline status](https://gitlab.com/prob-ml/bliss/badges/master/pipeline.svg)](https://gitlab.com/prob-ml/bliss/-/pipelines)
 [![codecov.io](https://codecov.io/gh/prob-ml/bliss/branch/master/graphs/badge.svg?branch=master&token=Jgzv0gn3rA)](http://codecov.io/github/prob-ml/bliss?branch=master)
 [![PyPI](https://img.shields.io/pypi/v/bliss-toolkit.svg)](https://pypi.org/project/bliss-toolkit)
 
