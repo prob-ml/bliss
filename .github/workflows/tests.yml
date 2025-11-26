@@ -24,6 +24,11 @@ jobs:
         with:
           lfs: true
 
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
+
       - name: Install fftw3
         run: sudo apt-get install libfftw3-dev
 
@@ -40,8 +45,10 @@ jobs:
           echo "JUPYTER_PLATFORM_DIRS=1" >> $GITHUB_ENV
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Install poetry dependencies
+      - name: Install poetry dependencies (CPU-only PyTorch for CI)
         run: |
+          poetry install --only-root
+          poetry run pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           poetry install --sync
 
       - name: Run black
