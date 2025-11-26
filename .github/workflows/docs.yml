@@ -1,0 +1,56 @@
+name: docs
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "poetry"
+
+      - name: Install fftw3
+        run: |
+          sudo apt-get install libfftw3-dev
+
+      - name: Install poetry dependencies
+        run: |
+          poetry install
+
+      - name: Create local changes
+        run: |
+          pushd ./docs/docsrc
+          poetry run make clean
+          poetry run make github
+          popd
+          git add --force ./docs
+          git restore --staged ./docs/docsrc/bin
+
+      - name: Commit files
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git commit -m "Generate docs" -a
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: refs/heads/master-sphinx
+          force: true

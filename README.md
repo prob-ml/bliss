@@ -3,6 +3,7 @@
 
 Bayesian Light Source Separator (BLISS)
 ========================================
+[![](https://img.shields.io/badge/docs-master-blue.svg)](https://prob-ml.github.io/bliss/)
 [![tests](https://github.com/prob-ml/bliss/workflows/tests/badge.svg)](https://github.com/prob-ml/bliss/actions/workflows/tests.yml)
 [![codecov.io](https://codecov.io/gh/prob-ml/bliss/branch/master/graphs/badge.svg?branch=master&token=Jgzv0gn3rA)](http://codecov.io/github/prob-ml/bliss?branch=master)
 [![PyPI](https://img.shields.io/pypi/v/bliss-toolkit.svg)](https://pypi.org/project/bliss-toolkit)
@@ -31,9 +32,14 @@ The required dependencies are listed in the `[tool.poetry.dependencies]` block o
 
 # Installation (Developers)
 
-1. To use and install `bliss` you first need to install [poetry](https://python-poetry.org/docs/).
+1. Install [poetry](https://python-poetry.org/docs/):
 
-2. Then, install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+poetry config virtualenvs.in-project true
+```
+
+2. Install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
 
 ```bash
 sudo apt-get install libfftw3-dev
@@ -58,14 +64,20 @@ cd bliss
 poetry install
 ```
 
-6. Verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
+6. Activate the virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+7. Verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
 
 ```bash
 pytest
 pytest --gpu
 ```
 
-7. Finally, if you are planning to contribute code to this repository, consider installing our pre-commit hooks so that your code commits will be checked locally for compliance with our coding conventions:
+8. Finally, if you are planning to contribute code to this repository, consider installing our pre-commit hooks so that your code commits will be checked locally for compliance with our coding conventions:
 
 ```bash
 pre-commit install
@@ -94,8 +106,8 @@ The `case_studies/` directory contains research applications of BLISS:
 - **galaxy_clustering/** - Galaxy cluster detection and membership prediction, validated on DES DR2
 - **dc2_cataloging/** - Full cataloging pipeline for DC2 simulation
 - **strong_lensing/** - Strong gravitational lens detection
-- **spatial_tiling/** - Spatially autoregressive tiling
-- **psf_variation/** - Handling spatially varying PSFs
+- **spatial_tiling/** - Spatially autoregressive tiling for astronomical cataloging
+- **psf_variation/** - Spatially varying PSFs for astronomical cataloging
 
 # References
 

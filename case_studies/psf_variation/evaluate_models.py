@@ -488,7 +488,7 @@ def plot_flux_within_one_mag(binned_avg_flux_probs, bins):
 
     ax.tick_params(axis="both", which="major", labelsize="xx-large")
     ax.set_xlabel("r-band Magnitude", fontsize="xx-large")
-    ax.set_ylabel("Pr($f_{\mathrm{pred}}$ within 1 magnitude)", fontsize="xx-large")
+    ax.set_ylabel(r"Pr($f_{\mathrm{pred}}$ within 1 magnitude)", fontsize="xx-large")
     ax.legend(fontsize="x-large")
 
     fig.tight_layout()
@@ -599,7 +599,7 @@ def plot_prop_flux_in_interval(prop_all_in_eti, prop_bright_in_eti, prop_dim_in_
     for a in ax:
         a.set_xticks(intervals, xticks)
         a.tick_params(axis="both", which="major", labelsize="x-large")
-        a.set_xlabel("\% Credible Interval", fontsize="xx-large")
+        a.set_xlabel(r"\% Credible Interval", fontsize="xx-large")
     ax[0].set_ylabel("Proportion of true fluxes in interval", fontsize="xx-large")
 
     fig.tight_layout()
@@ -1085,12 +1085,12 @@ if args.plot_eval:
             "yaxis_in_percent": False,
         },
         "flux_err_r_mpe": {
-            "ylabel": "r-band Flux Mean \% Error",
+            "ylabel": r"r-band Flux Mean \% Error",
             "metric_class": "flux_error",
             "yaxis_in_percent": True,
         },
         "flux_err_r_mape": {
-            "ylabel": "r-band Flux Mean Abosolute \% Error",
+            "ylabel": r"r-band Flux Mean Absolute \% Error",
             "metric_class": "flux_error",
             "yaxis_in_percent": True,
         },
@@ -1279,9 +1279,9 @@ if args.plot_calibration:
     flux_scale = data["flux_scale"]
 
     metrics_to_plot = {
-        "ci_width": {"ylabel": "Average width of 95\% CI (nmgy)", "ylabel_size": "xx-large"},
+        "ci_width": {"ylabel": r"Average width of 95\% CI (nmgy)", "ylabel_size": "xx-large"},
         "ci_width_prop": {
-            "ylabel": "Average width of 95\% CI / true flux",
+            "ylabel": r"Average width of 95\% CI / true flux",
             "ylabel_size": "xx-large",
         },
         "flux_scale": {"ylabel": "Average $\\sigma$ for predicted flux", "ylabel_size": "xx-large"},

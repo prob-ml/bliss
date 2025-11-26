@@ -20,5 +20,10 @@ Table of Contents
     :name: mastertoc
 
     Installation
+    QuickStart
+    CLI
+    Configuration
+    DataFormats
+    CaseStudies
     api/index
-    tutorials/index
+    Contributing
