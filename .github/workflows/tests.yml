@@ -12,7 +12,7 @@ on:
 
 jobs:
   build:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
@@ -23,6 +23,14 @@ jobs:
         uses: actions/checkout@v3
         with:
           lfs: true
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
+
+      - name: Install fftw3
+        run: sudo apt-get install libfftw3-dev
 
       - name: Install poetry
         run: pipx install poetry
@@ -38,28 +46,22 @@ jobs:
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
       - name: Install poetry dependencies
-        run: |
-          poetry install --sync
+        run: poetry install --sync
 
       - name: Run black
-        run: |
-          poetry run black --check .
+        run: poetry run black --check .
 
       - name: Run flake8
-        run: |
-          poetry run flake8 bliss/ tests/ case_studies/
+        run: poetry run flake8 bliss/ tests/ case_studies/
 
       - name: Run pylint
-        run: |
-          poetry run pylint bliss/ tests/ case_studies/
+        run: poetry run pylint bliss/ tests/ case_studies/
 
       - name: Run darglint
-        run: |
-          poetry run darglint bliss/ tests/
+        run: poetry run darglint bliss/ tests/
 
       - name: Run Tests on the CPU
-        run: |
-          poetry run pytest --cov=./bliss --cov-report=xml --durations=0
+        run: poetry run pytest --cov=./bliss --cov-report=xml --durations=0
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
