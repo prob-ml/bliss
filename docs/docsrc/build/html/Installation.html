@@ -1,0 +1,222 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Installation Guide &mdash; bliss  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Bliss API" href="api/index.html" />
+    <link rel="prev" title="Bayesian Light Source Separator (BLISS)" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">Bliss API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Installation Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/Installation.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="installation-guide">
+<h1>Installation Guide<a class="headerlink" href="#installation-guide" title="Link to this heading"></a></h1>
+<section id="quick-install">
+<h2>Quick Install<a class="headerlink" href="#quick-install" title="Link to this heading"></a></h2>
+<p><strong>Requirements:</strong> Python 3.12 or higher, CUDA-capable GPU</p>
+<p>BLISS is pip installable:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">bliss</span><span class="o">-</span><span class="n">toolkit</span>
+</pre></div>
+</div>
+</section>
+<section id="developer-installation">
+<h2>Developer Installation<a class="headerlink" href="#developer-installation" title="Link to this heading"></a></h2>
+<ol class="arabic">
+<li><p>Install <a class="reference external" href="https://python-poetry.org/docs/">poetry</a>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">curl</span> <span class="o">-</span><span class="n">sSL</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">install</span><span class="o">.</span><span class="n">python</span><span class="o">-</span><span class="n">poetry</span><span class="o">.</span><span class="n">org</span> <span class="o">|</span> <span class="n">python3</span> <span class="o">-</span>
+<span class="n">poetry</span> <span class="n">config</span> <span class="n">virtualenvs</span><span class="o">.</span><span class="ow">in</span><span class="o">-</span><span class="n">project</span> <span class="n">true</span>
+</pre></div>
+</div>
+</li>
+<li><p>Install the <a class="reference external" href="http://www.fftw.org">fftw</a> library (used by GalSim):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">apt</span><span class="o">-</span><span class="n">get</span> <span class="n">install</span> <span class="n">libfftw3</span><span class="o">-</span><span class="n">dev</span>
+</pre></div>
+</div>
+</li>
+<li><p>Install git-lfs if you haven’t already:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span><span class="o">-</span><span class="n">lfs</span> <span class="n">install</span>
+</pre></div>
+</div>
+</li>
+<li><p>Clone the repo and install dependencies:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">git</span><span class="nd">@github</span><span class="o">.</span><span class="n">com</span><span class="p">:</span><span class="n">prob</span><span class="o">-</span><span class="n">ml</span><span class="o">/</span><span class="n">bliss</span><span class="o">.</span><span class="n">git</span>
+<span class="n">cd</span> <span class="n">bliss</span>
+<span class="n">poetry</span> <span class="n">install</span>
+</pre></div>
+</div>
+</li>
+<li><p>Verify installation by running tests:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pytest</span>
+<span class="n">pytest</span> <span class="o">--</span><span class="n">gpu</span>
+</pre></div>
+</div>
+</li>
+<li><p>(Optional) Install pre-commit hooks for development:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pre</span><span class="o">-</span><span class="n">commit</span> <span class="n">install</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+<section id="gpu-requirements">
+<h2>GPU Requirements<a class="headerlink" href="#gpu-requirements" title="Link to this heading"></a></h2>
+<p>BLISS requires a CUDA-capable GPU for training. Check your CUDA version with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">nvidia</span><span class="o">-</span><span class="n">smi</span>
+</pre></div>
+</div>
+<p>BLISS uses PyTorch with CUDA 12.8 support, which works on both older GPUs (RTX 2080 Ti) and newer architectures.</p>
+</section>
+<section id="core-dependencies">
+<h2>Core Dependencies<a class="headerlink" href="#core-dependencies" title="Link to this heading"></a></h2>
+<p>BLISS requires the following core packages:</p>
+<ul class="simple">
+<li><p><strong>PyTorch</strong> (&gt;=2.7.0): Deep learning framework</p></li>
+<li><p><strong>PyTorch Lightning</strong> (&gt;=2.3.3): Training infrastructure</p></li>
+<li><p><strong>Hydra</strong> (&gt;=1.0.4): Configuration management</p></li>
+<li><p><strong>GalSim</strong> (&gt;=2.4.10): Galaxy image simulation</p></li>
+<li><p><strong>Astropy</strong> (&gt;=6.1.1): Astronomical utilities</p></li>
+<li><p><strong>NumPy</strong>, <strong>SciPy</strong>, <strong>Matplotlib</strong>: Scientific computing</p></li>
+</ul>
+</section>
+<section id="optional-dependencies">
+<h2>Optional Dependencies<a class="headerlink" href="#optional-dependencies" title="Link to this heading"></a></h2>
+<p>For specific use cases, you may need additional packages:</p>
+<p><strong>Weak Lensing Analysis</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">healpy</span>
+</pre></div>
+</div>
+<p><strong>Galaxy Clustering</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">h5py</span> <span class="n">pyarrow</span>
+</pre></div>
+</div>
+<p><strong>Photo-z Estimation</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">scikit</span><span class="o">-</span><span class="n">learn</span>
+</pre></div>
+</div>
+<p><strong>Visualization</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">plotly</span> <span class="n">seaborn</span>
+</pre></div>
+</div>
+<p><strong>TensorBoard Logging</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">tensorboard</span>
+</pre></div>
+</div>
+<p>All optional dependencies are included in the development installation (<code class="docutils literal notranslate"><span class="pre">poetry</span> <span class="pre">install</span></code>).</p>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<p><strong>GalSim installation fails:</strong></p>
+<p>Ensure FFTW is installed:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">apt</span><span class="o">-</span><span class="n">get</span> <span class="n">install</span> <span class="n">libfftw3</span><span class="o">-</span><span class="n">dev</span>  <span class="c1"># Ubuntu/Debian</span>
+<span class="n">brew</span> <span class="n">install</span> <span class="n">fftw</span>                   <span class="c1"># macOS</span>
+</pre></div>
+</div>
+<p><strong>CUDA not found:</strong></p>
+<p>Verify your CUDA installation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">nvcc</span> <span class="o">--</span><span class="n">version</span>
+<span class="n">nvidia</span><span class="o">-</span><span class="n">smi</span>
+</pre></div>
+</div>
+<p><strong>Memory errors during training:</strong></p>
+<p>Reduce batch size in configuration:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">bliss</span> <span class="n">mode</span><span class="o">=</span><span class="n">train</span> <span class="n">cached_simulator</span><span class="o">.</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">8</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Bayesian Light Source Separator (BLISS)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api/index.html" class="btn btn-neutral float-right" title="Bliss API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

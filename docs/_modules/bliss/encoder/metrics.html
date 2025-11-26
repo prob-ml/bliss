@@ -1,0 +1,870 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss.encoder.metrics &mdash; bliss  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bliss.encoder.metrics</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bliss.encoder.metrics</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">einops</span><span class="w"> </span><span class="kn">import</span> <span class="n">rearrange</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">linear_sum_assignment</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchmetrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">Metric</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">FullCatalog</span><span class="p">,</span> <span class="n">convert_flux_to_magnitude</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CatalogMatcher</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dist_slack</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">mag_slack</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mag_band</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dist_slack</span> <span class="o">=</span> <span class="n">dist_slack</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mag_slack</span> <span class="o">=</span> <span class="n">mag_slack</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mag_band</span> <span class="o">=</span> <span class="n">mag_band</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">match_catalogs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">true_cat</span><span class="p">,</span> <span class="n">FullCatalog</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">est_cat</span><span class="p">,</span> <span class="n">FullCatalog</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">batch_size</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mag_slack</span><span class="p">:</span>
+            <span class="n">true_mags</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">on_magnitudes</span><span class="p">(</span><span class="n">zero_point</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mag_band</span><span class="p">]</span>
+            <span class="n">est_mags</span> <span class="o">=</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">on_magnitudes</span><span class="p">(</span><span class="n">zero_point</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mag_band</span><span class="p">]</span>
+
+        <span class="n">matching</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">true_cat</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">n_true</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">true_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="n">n_est</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+            <span class="n">true_locs</span> <span class="o">=</span> <span class="n">true_cat</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_true</span><span class="p">]</span>
+            <span class="n">est_locs</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_est</span><span class="p">]</span>
+
+            <span class="n">locs_diff</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">true_locs</span><span class="p">,</span> <span class="s2">&quot;i j -&gt; i 1 j&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">est_locs</span><span class="p">,</span> <span class="s2">&quot;i j -&gt; 1 i j&quot;</span><span class="p">)</span>
+            <span class="n">locs_dist</span> <span class="o">=</span> <span class="n">locs_diff</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+            <span class="c1"># Penalize all pairs which are greater than slack apart to favor valid matches</span>
+            <span class="n">oob</span> <span class="o">=</span> <span class="n">locs_dist</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">dist_slack</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mag_slack</span><span class="p">:</span>
+                <span class="n">true_mag_col</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">true_mags</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_true</span><span class="p">],</span> <span class="s2">&quot;k -&gt; k 1&quot;</span><span class="p">)</span>
+                <span class="n">est_mag_col</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">est_mags</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_est</span><span class="p">],</span> <span class="s2">&quot;k -&gt; 1 k&quot;</span><span class="p">)</span>
+                <span class="n">mag_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_mag_col</span> <span class="o">-</span> <span class="n">est_mag_col</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+                <span class="n">oob</span> <span class="o">|=</span> <span class="n">mag_err</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">mag_slack</span>
+
+            <span class="n">cost</span> <span class="o">=</span> <span class="n">locs_dist</span> <span class="o">+</span> <span class="n">oob</span> <span class="o">*</span> <span class="mf">1e20</span>
+
+            <span class="c1"># find minimal permutation (can be slow for large catalogs, consider using a heuristic</span>
+            <span class="c1"># that exploits sparsity instead)</span>
+            <span class="n">row_indx</span><span class="p">,</span> <span class="n">col_indx</span> <span class="o">=</span> <span class="n">linear_sum_assignment</span><span class="p">(</span><span class="n">cost</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">())</span>
+
+            <span class="c1"># good match condition: not out-of-bounds due to either slack contraint</span>
+            <span class="n">valid_matches</span> <span class="o">=</span> <span class="o">~</span><span class="n">oob</span><span class="p">[</span><span class="n">row_indx</span><span class="p">,</span> <span class="n">col_indx</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+            <span class="n">true_matches</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">row_indx</span><span class="p">[</span><span class="n">valid_matches</span><span class="p">])</span>
+            <span class="n">est_matches</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">col_indx</span><span class="p">[</span><span class="n">valid_matches</span><span class="p">])</span>
+            <span class="n">matching</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">true_matches</span><span class="p">,</span> <span class="n">est_matches</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">matching</span>
+
+
+<div class="viewcode-block" id="CatFilter">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.CatFilter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CatFilter</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<div class="viewcode-block" id="CatFilter.get_cur_filter_bools">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.CatFilter.get_cur_filter_bools">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_cur_filter_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get filter bools.&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="CatFilter.get_cur_postfix">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.CatFilter.get_cur_postfix">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_cur_postfix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get postfix for the output metric name.&quot;&quot;&quot;</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="NullFilter">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.NullFilter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NullFilter</span><span class="p">(</span><span class="n">CatFilter</span><span class="p">):</span>
+<div class="viewcode-block" id="NullFilter.get_cur_filter_bools">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.NullFilter.get_cur_filter_bools">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_cur_filter_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">):</span>
+        <span class="n">true_filter_bools</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">true_cat</span><span class="o">.</span><span class="n">is_on_mask</span><span class="p">)</span>
+        <span class="n">est_filter_bools</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">est_cat</span><span class="o">.</span><span class="n">is_on_mask</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">true_filter_bools</span><span class="p">,</span> <span class="n">est_filter_bools</span></div>
+
+
+<div class="viewcode-block" id="NullFilter.get_cur_postfix">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.NullFilter.get_cur_postfix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_cur_postfix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SourceTypeFilter">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.SourceTypeFilter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SourceTypeFilter</span><span class="p">(</span><span class="n">CatFilter</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filter_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">filter_type</span> <span class="o">=</span> <span class="n">filter_type</span>
+        <span class="k">assert</span> <span class="n">filter_type</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;star&quot;</span><span class="p">,</span> <span class="s2">&quot;galaxy&quot;</span><span class="p">},</span> <span class="s2">&quot;invalid source_type_filter&quot;</span>
+
+<div class="viewcode-block" id="SourceTypeFilter.get_cur_filter_bools">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.SourceTypeFilter.get_cur_filter_bools">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_cur_filter_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_type</span> <span class="o">==</span> <span class="s2">&quot;star&quot;</span><span class="p">:</span>
+            <span class="n">true_filter_bools</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">star_bools</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">est_filter_bools</span> <span class="o">=</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">star_bools</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_type</span> <span class="o">==</span> <span class="s2">&quot;galaxy&quot;</span><span class="p">:</span>
+            <span class="n">true_filter_bools</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">est_filter_bools</span> <span class="o">=</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">true_filter_bools</span><span class="p">,</span> <span class="n">est_filter_bools</span></div>
+
+
+<div class="viewcode-block" id="SourceTypeFilter.get_cur_postfix">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.SourceTypeFilter.get_cur_postfix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_cur_postfix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_type</span></div>
+</div>
+
+
+
+<span class="c1"># it can handle the blendedness bin</span>
+<div class="viewcode-block" id="GeneralBinMetric">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.GeneralBinMetric">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GeneralBinMetric</span><span class="p">(</span><span class="n">Metric</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bin_cutoffs</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">exclude_last_bin</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin_cutoffs</span> <span class="o">=</span> <span class="n">bin_cutoffs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exclude_last_bin</span> <span class="o">=</span> <span class="n">exclude_last_bin</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_cutoffs</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_bin_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">additional_dim</span><span class="o">=</span><span class="p">(),</span> <span class="n">dist_reduce_fx</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">):</span>
+        <span class="n">default_values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">additional_dim</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_state</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">default_values</span><span class="p">,</span> <span class="n">dist_reduce_fx</span><span class="o">=</span><span class="n">dist_reduce_fx</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">bucketize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+        <span class="n">cutoffs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_cutoffs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">cutoffs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">bincount</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">minlength</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_state_for_report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_name</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">state</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exclude_last_bin</span> <span class="k">else</span> <span class="n">state</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_report_bins</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">report_bins</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_cutoffs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">report_bins</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exclude_last_bin</span> <span class="k">else</span> <span class="n">report_bins</span></div>
+
+
+
+<div class="viewcode-block" id="FluxBinMetric">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.FluxBinMetric">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FluxBinMetric</span><span class="p">(</span><span class="n">GeneralBinMetric</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_flux_bin_cutoffs</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">mag_zero_point</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">report_bin_unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">exclude_last_bin</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">bin_cutoffs</span><span class="o">=</span><span class="n">base_flux_bin_cutoffs</span><span class="p">,</span> <span class="n">exclude_last_bin</span><span class="o">=</span><span class="n">exclude_last_bin</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_flux_bin_cutoffs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_cutoffs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mag_zero_point</span> <span class="o">=</span> <span class="n">mag_zero_point</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">report_bin_unit</span> <span class="o">=</span> <span class="n">report_bin_unit</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">report_bin_unit</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;flux&quot;</span><span class="p">,</span> <span class="s2">&quot;mag&quot;</span><span class="p">},</span> <span class="s2">&quot;invalid bin type&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_state_for_report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_name</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_name</span><span class="p">)</span>
+        <span class="k">match</span> <span class="bp">self</span><span class="o">.</span><span class="n">report_bin_unit</span><span class="p">:</span>
+            <span class="k">case</span> <span class="s2">&quot;flux&quot;</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">case</span> <span class="s2">&quot;mag&quot;</span><span class="p">:</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
+            <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">state</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exclude_last_bin</span> <span class="k">else</span> <span class="n">state</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_report_bins</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">report_bins</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_flux_bin_cutoffs</span><span class="p">)</span>
+        <span class="k">match</span> <span class="bp">self</span><span class="o">.</span><span class="n">report_bin_unit</span><span class="p">:</span>
+            <span class="k">case</span> <span class="s2">&quot;flux&quot;</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">case</span> <span class="s2">&quot;mag&quot;</span><span class="p">:</span>
+                <span class="n">report_bins</span> <span class="o">=</span> <span class="n">convert_flux_to_magnitude</span><span class="p">(</span><span class="n">report_bins</span><span class="p">,</span> <span class="n">zero_point</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mag_zero_point</span><span class="p">)</span>
+                <span class="n">report_bins</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">report_bins</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
+            <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">report_bins</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exclude_last_bin</span> <span class="k">else</span> <span class="n">report_bins</span></div>
+
+
+
+<div class="viewcode-block" id="FluxBinMetricWithFilter">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.FluxBinMetricWithFilter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FluxBinMetricWithFilter</span><span class="p">(</span><span class="n">FluxBinMetric</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_flux_bin_cutoffs</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">mag_zero_point</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">report_bin_unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">exclude_last_bin</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">filter_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CatFilter</span><span class="p">],</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">base_flux_bin_cutoffs</span><span class="p">,</span> <span class="n">mag_zero_point</span><span class="p">,</span> <span class="n">report_bin_unit</span><span class="p">,</span> <span class="n">exclude_last_bin</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">filter_list</span> <span class="o">=</span> <span class="n">filter_list</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_list</span><span class="p">,</span> <span class="s2">&quot;filter_list can&#39;t be empty&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_postfix</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_filter_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">):</span>
+        <span class="n">true_filter_bools</span><span class="p">,</span> <span class="n">est_filter_bools</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">cur_filter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_list</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">true_filter_bools</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">est_filter_bools</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">true_filter_bools</span><span class="p">,</span> <span class="n">est_filter_bools</span> <span class="o">=</span> <span class="n">cur_filter</span><span class="o">.</span><span class="n">get_cur_filter_bools</span><span class="p">(</span>
+                    <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">cur_true_filter_bools</span><span class="p">,</span> <span class="n">cur_est_filter_bools</span> <span class="o">=</span> <span class="n">cur_filter</span><span class="o">.</span><span class="n">get_cur_filter_bools</span><span class="p">(</span>
+                    <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span>
+                <span class="p">)</span>
+                <span class="n">true_filter_bools</span> <span class="o">&amp;=</span> <span class="n">cur_true_filter_bools</span>
+                <span class="n">est_filter_bools</span> <span class="o">&amp;=</span> <span class="n">cur_est_filter_bools</span>
+
+        <span class="k">return</span> <span class="n">true_filter_bools</span><span class="p">,</span> <span class="n">est_filter_bools</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_postfix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">postfix_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">cur_filter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_list</span><span class="p">:</span>
+            <span class="n">cur_postfix</span> <span class="o">=</span> <span class="n">cur_filter</span><span class="o">.</span><span class="n">get_cur_postfix</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">cur_postfix</span><span class="p">:</span>
+                <span class="n">postfix_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cur_postfix</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">postfix_list</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="s1">&#39;_&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">postfix_list</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="DetectionPerformance">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.DetectionPerformance">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DetectionPerformance</span><span class="p">(</span><span class="n">FluxBinMetricWithFilter</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_flux_bin_cutoffs</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mag_zero_point</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ref_band</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">report_bin_unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;flux&quot;</span><span class="p">,</span>
+        <span class="n">exclude_last_bin</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">filter_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CatFilter</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">base_flux_bin_cutoffs</span> <span class="k">if</span> <span class="n">base_flux_bin_cutoffs</span> <span class="k">else</span> <span class="p">[],</span>
+            <span class="n">mag_zero_point</span><span class="p">,</span>
+            <span class="n">report_bin_unit</span><span class="p">,</span>
+            <span class="n">exclude_last_bin</span><span class="p">,</span>
+            <span class="n">filter_list</span> <span class="k">if</span> <span class="n">filter_list</span> <span class="k">else</span> <span class="p">[</span><span class="n">NullFilter</span><span class="p">()],</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span> <span class="o">=</span> <span class="n">ref_band</span>
+
+        <span class="n">detection_metrics</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s2">&quot;n_true_sources&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;n_est_sources&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;n_true_matches&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;n_est_matches&quot;</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">metric</span> <span class="ow">in</span> <span class="n">detection_metrics</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="n">metric</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DetectionPerformance.update">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.DetectionPerformance.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">,</span> <span class="n">matching</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">true_cat</span><span class="p">,</span> <span class="n">FullCatalog</span><span class="p">),</span> <span class="s2">&quot;true_cat should be FullCatalog&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">est_cat</span><span class="p">,</span> <span class="n">FullCatalog</span><span class="p">),</span> <span class="s2">&quot;est_cat should be FullCatalog&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">on_fluxes</span>
+            <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">true_fluxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+            <span class="n">est_fluxes</span> <span class="o">=</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">on_fluxes</span>
+            <span class="n">est_fluxes</span> <span class="o">=</span> <span class="n">est_fluxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># hack to match regardless of magnitude; intended for</span>
+            <span class="c1"># catalogs from surveys with incompatible filter bands</span>
+            <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">true_cat</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">][:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">])</span>
+            <span class="n">est_fluxes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">][:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">])</span>
+
+        <span class="n">true_filter_bools</span><span class="p">,</span> <span class="n">est_filter_bools</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_filter_bools</span><span class="p">(</span><span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">true_cat</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">tcat_matches</span><span class="p">,</span> <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">matching</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="s2">&quot;tcat_matches and ecat_matches should be of the same size&quot;</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tcat_matches</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">ecat_matches</span><span class="p">),</span> <span class="n">error_msg</span>
+            <span class="n">tcat_matches</span><span class="p">,</span> <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">tcat_matches</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">),</span> <span class="n">ecat_matches</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">n_true</span> <span class="o">=</span> <span class="n">true_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">n_est</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+            <span class="n">cur_batch_true_fluxes</span> <span class="o">=</span> <span class="n">true_fluxes</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_true</span><span class="p">]</span>
+            <span class="n">cur_batch_est_fluxes</span> <span class="o">=</span> <span class="n">est_fluxes</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_est</span><span class="p">]</span>
+
+            <span class="n">cur_batch_true_filter_bools</span> <span class="o">=</span> <span class="n">true_filter_bools</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_true</span><span class="p">]</span>
+            <span class="n">cur_batch_est_filter_bools</span> <span class="o">=</span> <span class="n">est_filter_bools</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">n_est</span><span class="p">]</span>
+
+            <span class="n">tmi</span> <span class="o">=</span> <span class="n">cur_batch_true_fluxes</span><span class="p">[</span><span class="n">cur_batch_true_filter_bools</span><span class="p">]</span>
+            <span class="n">emi</span> <span class="o">=</span> <span class="n">cur_batch_est_fluxes</span><span class="p">[</span><span class="n">cur_batch_est_filter_bools</span><span class="p">]</span>
+
+            <span class="n">tcat_matches</span> <span class="o">=</span> <span class="n">tcat_matches</span><span class="p">[</span><span class="n">cur_batch_true_filter_bools</span><span class="p">[</span><span class="n">tcat_matches</span><span class="p">]]</span>
+            <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">ecat_matches</span><span class="p">[</span><span class="n">cur_batch_est_filter_bools</span><span class="p">[</span><span class="n">ecat_matches</span><span class="p">]]</span>
+
+            <span class="n">tmim</span> <span class="o">=</span> <span class="n">cur_batch_true_fluxes</span><span class="p">[</span><span class="n">tcat_matches</span><span class="p">]</span>
+            <span class="n">emim</span> <span class="o">=</span> <span class="n">cur_batch_est_fluxes</span><span class="p">[</span><span class="n">ecat_matches</span><span class="p">]</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_true_sources</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">tmi</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_est_sources</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">emi</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_true_matches</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">tmim</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_est_matches</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">emim</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="DetectionPerformance.compute">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.DetectionPerformance.compute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">n_est_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_est_matches&quot;</span><span class="p">)</span>
+        <span class="n">n_true_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_true_matches&quot;</span><span class="p">)</span>
+        <span class="n">n_est_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_est_sources&quot;</span><span class="p">)</span>
+        <span class="n">n_true_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_true_sources&quot;</span><span class="p">)</span>
+
+        <span class="n">precision_per_bin</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_est_matches</span> <span class="o">/</span> <span class="n">n_est_sources</span><span class="p">)</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">recall_per_bin</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_true_matches</span> <span class="o">/</span> <span class="n">n_true_sources</span><span class="p">)</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">f1_per_bin</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="mi">2</span> <span class="o">*</span> <span class="n">precision_per_bin</span> <span class="o">*</span> <span class="n">recall_per_bin</span> <span class="o">/</span> <span class="p">(</span><span class="n">precision_per_bin</span> <span class="o">+</span> <span class="n">recall_per_bin</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">precision</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_est_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">n_est_sources</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">recall</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_true_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">n_true_sources</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">f1</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">precision</span> <span class="o">*</span> <span class="n">recall</span> <span class="o">/</span> <span class="p">(</span><span class="n">precision</span> <span class="o">+</span> <span class="n">recall</span><span class="p">))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">precision_bin_results</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_precision</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">_bin_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">bin_precision</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">bin_precision</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">precision_per_bin</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="n">recall_bin_results</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_recall</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">_bin_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">bin_recall</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">bin_recall</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">recall_per_bin</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="n">f1_bin_results</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_f1</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">_bin_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">bin_f1</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">bin_f1</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">f1_per_bin</span><span class="p">)</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_precision</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">precision</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_recall</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">recall</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_f1</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">f1</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">precision_bin_results</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">recall_bin_results</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">f1_bin_results</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_results_on_per_bin</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">n_true_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_true_matches&quot;</span><span class="p">)</span>
+        <span class="n">n_true_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_true_sources&quot;</span><span class="p">)</span>
+        <span class="n">n_est_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_est_matches&quot;</span><span class="p">)</span>
+        <span class="n">n_est_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_est_sources&quot;</span><span class="p">)</span>
+
+        <span class="n">recall</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_true_matches</span> <span class="o">/</span> <span class="n">n_true_sources</span><span class="p">)</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">precision</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_est_matches</span> <span class="o">/</span> <span class="n">n_est_sources</span><span class="p">)</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">f1</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">precision</span> <span class="o">*</span> <span class="n">recall</span> <span class="o">/</span> <span class="p">(</span><span class="n">precision</span> <span class="o">+</span> <span class="n">recall</span><span class="p">))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_precision</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">precision</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_recall</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">recall</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;detection_f1</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">f1</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_internal_states</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">n_true_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_true_sources&quot;</span><span class="p">)</span>
+        <span class="n">n_est_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_est_sources&quot;</span><span class="p">)</span>
+        <span class="n">n_true_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_true_matches&quot;</span><span class="p">)</span>
+        <span class="n">n_est_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_est_matches&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;n_true_sources</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">n_true_sources</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;n_est_sources</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">n_est_sources</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;n_true_matches</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">n_true_matches</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;n_est_matches</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">n_est_matches</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="SourceTypeAccuracy">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.SourceTypeAccuracy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SourceTypeAccuracy</span><span class="p">(</span><span class="n">FluxBinMetricWithFilter</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_flux_bin_cutoffs</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">mag_zero_point</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ref_band</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">report_bin_unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;flux&quot;</span><span class="p">,</span>
+        <span class="n">exclude_last_bin</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">filter_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CatFilter</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">base_flux_bin_cutoffs</span><span class="p">,</span>
+            <span class="n">mag_zero_point</span><span class="p">,</span>
+            <span class="n">report_bin_unit</span><span class="p">,</span>
+            <span class="n">exclude_last_bin</span><span class="p">,</span>
+            <span class="n">filter_list</span> <span class="k">if</span> <span class="n">filter_list</span> <span class="k">else</span> <span class="p">[</span><span class="n">NullFilter</span><span class="p">()],</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_flux_bin_cutoffs</span><span class="p">,</span> <span class="s2">&quot;cutoffs can&#39;t be None or empty&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span> <span class="o">=</span> <span class="n">ref_band</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;gal_tp&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;gal_fp&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;star_tp&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;star_fp&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;n_matches&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SourceTypeAccuracy.update">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.SourceTypeAccuracy.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">,</span> <span class="n">matching</span><span class="p">):</span>
+        <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+        <span class="n">true_filter_bools</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_filter_bools</span><span class="p">(</span><span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">true_cat</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">tcat_matches</span><span class="p">,</span> <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">matching</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tcat_matches</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span>
+                <span class="n">ecat_matches</span>
+            <span class="p">),</span> <span class="s2">&quot;tcat_matches and ecat_matches should be of the same size&quot;</span>
+            <span class="k">if</span> <span class="n">tcat_matches</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">ecat_matches</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">tcat_matches</span><span class="p">,</span> <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">tcat_matches</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">),</span> <span class="n">ecat_matches</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">tcat_matches_filter</span> <span class="o">=</span> <span class="n">true_filter_bools</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">tcat_matches</span><span class="p">]</span>
+            <span class="n">tcat_matches</span> <span class="o">=</span> <span class="n">tcat_matches</span><span class="p">[</span><span class="n">tcat_matches_filter</span><span class="p">]</span>
+            <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">ecat_matches</span><span class="p">[</span><span class="n">tcat_matches_filter</span><span class="p">]</span>
+
+            <span class="n">cur_batch_true_fluxes</span> <span class="o">=</span> <span class="n">true_fluxes</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">tcat_matches</span><span class="p">]</span>
+            <span class="n">bin_indexes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">cur_batch_true_fluxes</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_matches</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">bin_indexes</span><span class="p">)</span>
+
+            <span class="n">true_gal</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">tcat_matches</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">est_gal</span> <span class="o">=</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">ecat_matches</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+            <span class="n">gal_tp_bool</span> <span class="o">=</span> <span class="n">true_gal</span> <span class="o">&amp;</span> <span class="n">est_gal</span>
+            <span class="n">gal_fp_bool</span> <span class="o">=</span> <span class="o">~</span><span class="n">true_gal</span> <span class="o">&amp;</span> <span class="n">est_gal</span>
+            <span class="n">star_tp_bool</span> <span class="o">=</span> <span class="o">~</span><span class="n">true_gal</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">est_gal</span>
+            <span class="n">star_fp_bool</span> <span class="o">=</span> <span class="n">true_gal</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">est_gal</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">gal_tp</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">bin_indexes</span><span class="p">[</span><span class="n">gal_tp_bool</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gal_fp</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">bin_indexes</span><span class="p">[</span><span class="n">gal_fp_bool</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">star_tp</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">bin_indexes</span><span class="p">[</span><span class="n">star_tp_bool</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">star_fp</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">bin_indexes</span><span class="p">[</span><span class="n">star_fp_bool</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="SourceTypeAccuracy.compute">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.SourceTypeAccuracy.compute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">n_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_matches&quot;</span><span class="p">)</span>
+        <span class="n">gal_tp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;gal_tp&quot;</span><span class="p">)</span>
+        <span class="n">gal_fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;gal_fp&quot;</span><span class="p">)</span>
+        <span class="n">star_tp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;star_tp&quot;</span><span class="p">)</span>
+        <span class="n">star_fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;star_fp&quot;</span><span class="p">)</span>
+
+        <span class="n">acc</span> <span class="o">=</span> <span class="p">((</span><span class="n">gal_tp</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">+</span> <span class="n">star_tp</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span> <span class="o">/</span> <span class="n">n_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">acc_per_bin</span> <span class="o">=</span> <span class="p">((</span><span class="n">gal_tp</span> <span class="o">+</span> <span class="n">star_tp</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_matches</span><span class="p">)</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">star_acc</span> <span class="o">=</span> <span class="p">(</span><span class="n">star_tp</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">-</span> <span class="n">gal_tp</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">-</span> <span class="n">star_fp</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">star_acc_per_bin</span> <span class="o">=</span> <span class="p">(</span><span class="n">star_tp</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_matches</span> <span class="o">-</span> <span class="n">gal_tp</span> <span class="o">-</span> <span class="n">star_fp</span><span class="p">))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">gal_acc</span> <span class="o">=</span> <span class="p">(</span><span class="n">gal_tp</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">-</span> <span class="n">star_tp</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">-</span> <span class="n">gal_fp</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">gal_acc_per_bin</span> <span class="o">=</span> <span class="p">(</span><span class="n">gal_tp</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_matches</span> <span class="o">-</span> <span class="n">star_tp</span> <span class="o">-</span> <span class="n">gal_fp</span><span class="p">))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">acc_per_bin_results</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">_bin_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">bin_acc</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">bin_acc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">acc_per_bin</span><span class="p">)</span>
+        <span class="p">}</span>
+
+        <span class="n">star_acc_per_bin_results</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc_star</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">_bin_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">bin_star_acc</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">bin_star_acc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">star_acc_per_bin</span><span class="p">)</span>
+        <span class="p">}</span>
+
+        <span class="n">gal_acc_per_bin_results</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc_galaxy</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">_bin_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">bin_gal_acc</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">bin_gal_acc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">gal_acc_per_bin</span><span class="p">)</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">acc</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc_star</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">star_acc</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc_galaxy</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">gal_acc</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+            <span class="o">**</span><span class="n">acc_per_bin_results</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">star_acc_per_bin_results</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">gal_acc_per_bin_results</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_results_on_per_bin</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">n_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_matches&quot;</span><span class="p">)</span>
+        <span class="n">gal_tp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;gal_tp&quot;</span><span class="p">)</span>
+        <span class="n">gal_fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;gal_fp&quot;</span><span class="p">)</span>
+        <span class="n">star_tp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;star_tp&quot;</span><span class="p">)</span>
+        <span class="n">star_fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;star_fp&quot;</span><span class="p">)</span>
+
+        <span class="n">acc</span> <span class="o">=</span> <span class="p">((</span><span class="n">gal_tp</span> <span class="o">+</span> <span class="n">star_tp</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_matches</span><span class="p">)</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">star_acc</span> <span class="o">=</span> <span class="p">(</span><span class="n">star_tp</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_matches</span> <span class="o">-</span> <span class="n">gal_tp</span> <span class="o">-</span> <span class="n">star_fp</span><span class="p">))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">gal_acc</span> <span class="o">=</span> <span class="p">(</span><span class="n">gal_tp</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_matches</span> <span class="o">-</span> <span class="n">star_tp</span> <span class="o">-</span> <span class="n">gal_fp</span><span class="p">))</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">acc</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc_star</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">star_acc</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;classification_acc_galaxy</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">gal_acc</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_internal_states</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">n_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_matches&quot;</span><span class="p">)</span>
+        <span class="n">gal_tp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;gal_tp&quot;</span><span class="p">)</span>
+        <span class="n">gal_fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;gal_fp&quot;</span><span class="p">)</span>
+        <span class="n">star_tp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;star_tp&quot;</span><span class="p">)</span>
+        <span class="n">star_fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;star_fp&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;n_matches</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">n_matches</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;gal_tp</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">gal_tp</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;gal_fp</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">gal_fp</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;star_tp</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">star_tp</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;star_fp</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">postfix_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">star_fp</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="FluxError">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.FluxError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FluxError</span><span class="p">(</span><span class="n">FluxBinMetric</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">survey_bands</span><span class="p">,</span>
+        <span class="n">base_flux_bin_cutoffs</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">mag_zero_point</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ref_band</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">report_bin_unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mag&quot;</span><span class="p">,</span>
+        <span class="n">exclude_last_bin</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">base_flux_bin_cutoffs</span><span class="p">,</span> <span class="n">mag_zero_point</span><span class="p">,</span> <span class="n">report_bin_unit</span><span class="p">,</span> <span class="n">exclude_last_bin</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">survey_bands</span> <span class="o">=</span> <span class="n">survey_bands</span>  <span class="c1"># list of band names (e.g. &quot;r&quot;)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span> <span class="o">=</span> <span class="n">ref_band</span>
+
+        <span class="n">additional_dim</span> <span class="o">=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey_bands</span><span class="p">),)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;flux_abs_err&quot;</span><span class="p">,</span> <span class="n">additional_dim</span><span class="o">=</span><span class="n">additional_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;flux_pct_err&quot;</span><span class="p">,</span> <span class="n">additional_dim</span><span class="o">=</span><span class="n">additional_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;flux_abs_pct_err&quot;</span><span class="p">,</span> <span class="n">additional_dim</span><span class="o">=</span><span class="n">additional_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;n_matches&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FluxError.update">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.FluxError.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">,</span> <span class="n">matching</span><span class="p">):</span>
+        <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">true_cat</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">tcat_matches</span><span class="p">,</span> <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">matching</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">n_true</span> <span class="o">=</span> <span class="n">true_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">true_matched_fluxes</span> <span class="o">=</span> <span class="n">true_fluxes</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">n_true</span><span class="p">][</span><span class="n">tcat_matches</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+            <span class="n">bins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">true_matched_fluxes</span><span class="p">)</span>
+
+            <span class="n">true_flux</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">tcat_matches</span><span class="p">]</span>
+            <span class="n">est_flux</span> <span class="o">=</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">ecat_matches</span><span class="p">]</span>
+
+            <span class="c1"># Compute and update percent error per band</span>
+            <span class="n">abs_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_flux</span> <span class="o">-</span> <span class="n">est_flux</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+            <span class="n">pct_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_flux</span> <span class="o">-</span> <span class="n">est_flux</span><span class="p">)</span> <span class="o">/</span> <span class="n">true_flux</span>
+            <span class="n">abs_pct_err</span> <span class="o">=</span> <span class="n">pct_err</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey_bands</span><span class="p">)):</span>  <span class="c1"># noqa: WPS518</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">scatter_add</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">bins</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">abs_err</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">band</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">flux_abs_err</span><span class="p">[</span><span class="n">band</span><span class="p">]</span> <span class="o">+=</span> <span class="n">tmp</span>
+
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">scatter_add</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">bins</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">pct_err</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">band</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">flux_pct_err</span><span class="p">[</span><span class="n">band</span><span class="p">]</span> <span class="o">+=</span> <span class="n">tmp</span>
+
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">scatter_add</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">bins</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">abs_pct_err</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">band</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">flux_abs_pct_err</span><span class="p">[</span><span class="n">band</span><span class="p">]</span> <span class="o">+=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_matches</span> <span class="o">+=</span> <span class="n">bins</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">minlength</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FluxError.compute">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.FluxError.compute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">flux_abs_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;flux_abs_err&quot;</span><span class="p">)</span>
+        <span class="n">flux_pct_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;flux_pct_err&quot;</span><span class="p">)</span>
+        <span class="n">flux_abs_pct_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;flux_abs_pct_err&quot;</span><span class="p">)</span>
+        <span class="n">n_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_matches&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Compute final metrics</span>
+        <span class="n">mae</span> <span class="o">=</span> <span class="n">flux_abs_err</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">binned_mae</span> <span class="o">=</span> <span class="n">flux_abs_err</span> <span class="o">/</span> <span class="n">n_matches</span>
+        <span class="n">mpe</span> <span class="o">=</span> <span class="n">flux_pct_err</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">binned_mpe</span> <span class="o">=</span> <span class="n">flux_pct_err</span> <span class="o">/</span> <span class="n">n_matches</span>
+        <span class="n">mape</span> <span class="o">=</span> <span class="n">flux_abs_pct_err</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_matches</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">binned_mape</span> <span class="o">=</span> <span class="n">flux_abs_pct_err</span> <span class="o">/</span> <span class="n">n_matches</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">band</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey_bands</span><span class="p">):</span>
+            <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;flux_err_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">_mae&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mae</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;flux_err_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">_mpe&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mpe</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;flux_err_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">_mape&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mape</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">binned_mpe</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;flux_err_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">_mae_bin_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">binned_mae</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+                <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;flux_err_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">_mpe_bin_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">binned_mpe</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+                <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;flux_err_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">_mape_bin_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">binned_mape</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">results</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="GalaxyShapeError">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.GalaxyShapeError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GalaxyShapeError</span><span class="p">(</span><span class="n">FluxBinMetric</span><span class="p">):</span>
+    <span class="n">galaxy_params</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;galaxy_disk_frac&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_beta_radians&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_disk_q&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_bulge_q&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+    <span class="n">galaxy_param_to_idx</span> <span class="o">=</span> <span class="p">{</span><span class="n">param</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">galaxy_params</span><span class="p">)}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_flux_bin_cutoffs</span><span class="p">,</span>
+        <span class="n">mag_zero_point</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ref_band</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">report_bin_unit</span><span class="o">=</span><span class="s2">&quot;mag&quot;</span><span class="p">,</span>
+        <span class="n">exclude_last_bin</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">base_flux_bin_cutoffs</span><span class="p">,</span> <span class="n">mag_zero_point</span><span class="p">,</span> <span class="n">report_bin_unit</span><span class="p">,</span> <span class="n">exclude_last_bin</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span> <span class="o">=</span> <span class="n">ref_band</span>
+
+        <span class="n">additional_dim</span> <span class="o">=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">galaxy_params</span><span class="p">),)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;galaxy_param_err&quot;</span><span class="p">,</span> <span class="n">additional_dim</span><span class="o">=</span><span class="n">additional_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;disk_hlr_err&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;bulge_hlr_err&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_bin_state</span><span class="p">(</span><span class="s2">&quot;n_true_galaxies&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="GalaxyShapeError.update">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.GalaxyShapeError.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">true_cat</span><span class="p">,</span> <span class="n">est_cat</span><span class="p">,</span> <span class="n">matching</span><span class="p">):</span>
+        <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_band</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">true_cat</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">tcat_matches</span><span class="p">,</span> <span class="n">ecat_matches</span> <span class="o">=</span> <span class="n">matching</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">n_true</span> <span class="o">=</span> <span class="n">true_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+            <span class="n">is_gal</span> <span class="o">=</span> <span class="n">true_cat</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">tcat_matches</span><span class="p">][:,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="c1"># Skip if no galaxies in this image</span>
+            <span class="k">if</span> <span class="p">(</span><span class="o">~</span><span class="n">is_gal</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                <span class="k">continue</span>
+            <span class="n">true_matched_fluxes</span> <span class="o">=</span> <span class="n">true_fluxes</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">n_true</span><span class="p">][</span><span class="n">tcat_matches</span><span class="p">]</span>
+            <span class="n">true_gal_njy_fluxes</span> <span class="o">=</span> <span class="n">true_matched_fluxes</span><span class="p">[</span><span class="n">is_gal</span><span class="p">]</span>
+
+            <span class="c1"># get magnitude bin for each matched galaxy</span>
+            <span class="n">njy_flux_bins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucketize</span><span class="p">(</span><span class="n">true_gal_njy_fluxes</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_true_galaxies</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">njy_flux_bins</span><span class="p">)</span>
+
+            <span class="n">true_gal_params</span> <span class="o">=</span> <span class="n">true_cat</span><span class="p">[</span><span class="s2">&quot;galaxy_params&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">tcat_matches</span><span class="p">][</span><span class="n">is_gal</span><span class="p">]</span>
+
+            <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">galaxy_params</span><span class="p">):</span>
+                <span class="n">true_param</span> <span class="o">=</span> <span class="n">true_gal_params</span><span class="p">[:,</span> <span class="n">j</span><span class="p">]</span>
+                <span class="n">est_param</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">ecat_matches</span><span class="p">][</span><span class="n">is_gal</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+                <span class="n">abs_res</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_param</span> <span class="o">-</span> <span class="n">est_param</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+
+                <span class="c1"># Wrap angle around pi</span>
+                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;galaxy_beta_radians&quot;</span><span class="p">:</span>
+                    <span class="n">abs_res</span> <span class="o">=</span> <span class="n">abs_res</span> <span class="o">%</span> <span class="n">torch</span><span class="o">.</span><span class="n">pi</span>
+
+                <span class="c1"># Update bins</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_param_err</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">scatter_add</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">njy_flux_bins</span><span class="p">,</span> <span class="n">abs_res</span><span class="p">)</span>
+
+            <span class="c1"># Compute HLRs for disk and bulge</span>
+            <span class="n">true_a_d</span> <span class="o">=</span> <span class="n">true_gal_params</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_param_to_idx</span><span class="p">[</span><span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">]]</span>
+            <span class="n">true_disk_q</span> <span class="o">=</span> <span class="n">true_gal_params</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_param_to_idx</span><span class="p">[</span><span class="s2">&quot;galaxy_disk_q&quot;</span><span class="p">]]</span>
+            <span class="n">true_b_d</span> <span class="o">=</span> <span class="n">true_a_d</span> <span class="o">*</span> <span class="n">true_disk_q</span>
+            <span class="n">true_disk_hlr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">true_a_d</span> <span class="o">*</span> <span class="n">true_b_d</span><span class="p">)</span>
+
+            <span class="n">est_a_d</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">ecat_matches</span><span class="p">][</span><span class="n">is_gal</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">est_disk_q</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;galaxy_disk_q&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">ecat_matches</span><span class="p">][</span><span class="n">is_gal</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">est_b_d</span> <span class="o">=</span> <span class="n">est_a_d</span> <span class="o">*</span> <span class="n">est_disk_q</span>
+            <span class="n">est_disk_hlr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">est_a_d</span> <span class="o">*</span> <span class="n">est_b_d</span><span class="p">)</span>
+
+            <span class="n">true_a_b</span> <span class="o">=</span> <span class="n">true_gal_params</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_param_to_idx</span><span class="p">[</span><span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">]]</span>
+            <span class="n">true_bulge_q</span> <span class="o">=</span> <span class="n">true_gal_params</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_param_to_idx</span><span class="p">[</span><span class="s2">&quot;galaxy_bulge_q&quot;</span><span class="p">]]</span>
+            <span class="n">true_b_b</span> <span class="o">=</span> <span class="n">true_a_b</span> <span class="o">*</span> <span class="n">true_bulge_q</span>
+            <span class="n">true_bulge_hlr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">true_a_b</span> <span class="o">*</span> <span class="n">true_b_b</span><span class="p">)</span>
+
+            <span class="n">est_a_b</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">ecat_matches</span><span class="p">][</span><span class="n">is_gal</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">est_bulge_q</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;galaxy_bulge_q&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="n">ecat_matches</span><span class="p">][</span><span class="n">is_gal</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">est_b_b</span> <span class="o">=</span> <span class="n">est_a_b</span> <span class="o">*</span> <span class="n">est_bulge_q</span>
+            <span class="n">est_bulge_hlr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">est_a_b</span> <span class="o">*</span> <span class="n">est_b_b</span><span class="p">)</span>
+
+            <span class="n">abs_disk_hlr_res</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_disk_hlr</span> <span class="o">-</span> <span class="n">est_disk_hlr</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+            <span class="n">tmp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">disk_hlr_err</span> <span class="o">+=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">scatter_add</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">njy_flux_bins</span><span class="p">,</span> <span class="n">abs_disk_hlr_res</span><span class="p">)</span>
+
+            <span class="n">abs_bulge_hlr_res</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_bulge_hlr</span> <span class="o">-</span> <span class="n">est_bulge_hlr</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+            <span class="n">tmp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bulge_hlr_err</span> <span class="o">+=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">scatter_add</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">njy_flux_bins</span><span class="p">,</span> <span class="n">abs_bulge_hlr_res</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GalaxyShapeError.compute">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.metrics.GalaxyShapeError.compute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">galaxy_param_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;galaxy_param_err&quot;</span><span class="p">)</span>
+        <span class="n">disk_hlr_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;disk_hlr_err&quot;</span><span class="p">)</span>
+        <span class="n">bulge_hlr_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;bulge_hlr_err&quot;</span><span class="p">)</span>
+        <span class="n">n_galaxies</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_state_for_report</span><span class="p">(</span><span class="s2">&quot;n_true_galaxies&quot;</span><span class="p">)</span>
+
+        <span class="n">gal_param_mae</span> <span class="o">=</span> <span class="n">galaxy_param_err</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_galaxies</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">binned_gal_param_mae</span> <span class="o">=</span> <span class="n">galaxy_param_err</span> <span class="o">/</span> <span class="n">n_galaxies</span>
+
+        <span class="n">disk_hlr_mae</span> <span class="o">=</span> <span class="n">disk_hlr_err</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">n_galaxies</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">binned_disk_hlr_mae</span> <span class="o">=</span> <span class="n">disk_hlr_err</span> <span class="o">/</span> <span class="n">n_galaxies</span>
+        <span class="n">bulge_hlr_mae</span> <span class="o">=</span> <span class="n">bulge_hlr_err</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">n_galaxies</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">binned_bulge_hlr_mae</span> <span class="o">=</span> <span class="n">bulge_hlr_err</span> <span class="o">/</span> <span class="n">n_galaxies</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">galaxy_params</span><span class="p">):</span>
+            <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_mae&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">gal_param_mae</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">):</span>
+                <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_mae_bin_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">binned_gal_param_mae</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+
+        <span class="n">results</span><span class="p">[</span><span class="s2">&quot;galaxy_disk_hlr_mae&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">disk_hlr_mae</span>
+        <span class="n">results</span><span class="p">[</span><span class="s2">&quot;galaxy_bulge_hlr_mae&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">bulge_hlr_mae</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">):</span>
+            <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;galaxy_disk_hlr_mae_bin_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">binned_disk_hlr_mae</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+            <span class="n">results</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;galaxy_bulge_hlr_mae_bin_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">binned_bulge_hlr_mae</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">results</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

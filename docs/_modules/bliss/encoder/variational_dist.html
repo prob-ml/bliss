@@ -1,0 +1,596 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss.encoder.variational_dist &mdash; bliss  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bliss.encoder.variational_dist</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bliss.encoder.variational_dist</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">einops</span><span class="w"> </span><span class="kn">import</span> <span class="n">rearrange</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: WPS235</span>
+    <span class="n">AffineTransform</span><span class="p">,</span>
+    <span class="n">Categorical</span><span class="p">,</span>
+    <span class="n">Distribution</span><span class="p">,</span>
+    <span class="n">Independent</span><span class="p">,</span>
+    <span class="n">LogNormal</span><span class="p">,</span>
+    <span class="n">MultivariateNormal</span><span class="p">,</span>
+    <span class="n">Normal</span><span class="p">,</span>
+    <span class="n">SigmoidTransform</span><span class="p">,</span>
+    <span class="n">TransformedDistribution</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseTileCatalog</span><span class="p">,</span> <span class="n">TileCatalog</span>
+
+
+<div class="viewcode-block" id="VariationalDist">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.VariationalDist">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">VariationalDist</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">factors</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">factors</span> <span class="o">=</span> <span class="n">factors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_params_per_source</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">fs</span><span class="o">.</span><span class="n">n_params</span> <span class="k">for</span> <span class="n">fs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">factors</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_factor_param_pairs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_cat</span><span class="p">):</span>
+        <span class="n">split_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span><span class="o">.</span><span class="n">n_params</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">factors</span><span class="p">]</span>
+        <span class="n">dist_params_lst</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">x_cat</span><span class="p">,</span> <span class="n">split_sizes</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">factors</span><span class="p">,</span> <span class="n">dist_params_lst</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_cat</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_base_cat</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">fp_pairs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factor_param_pairs</span><span class="p">(</span><span class="n">x_cat</span><span class="p">)</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="n">qk</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">qk</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">use_mode</span><span class="p">)</span> <span class="k">for</span> <span class="n">qk</span><span class="p">,</span> <span class="n">params</span> <span class="ow">in</span> <span class="n">fp_pairs</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">BaseTileCatalog</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="k">if</span> <span class="n">return_base_cat</span> <span class="k">else</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_nll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_cat</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">):</span>
+        <span class="n">fp_pairs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factor_param_pairs</span><span class="p">(</span><span class="n">x_cat</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">qk</span><span class="o">.</span><span class="n">compute_nll</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">)</span> <span class="k">for</span> <span class="n">qk</span><span class="p">,</span> <span class="n">params</span> <span class="ow">in</span> <span class="n">fp_pairs</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="NllGating">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.NllGating">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NllGating</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">:</span> <span class="n">TileCatalog</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get Gating for nll.&quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="NullGating">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.NullGating">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NullGating</span><span class="p">(</span><span class="n">NllGating</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">:</span> <span class="n">TileCatalog</span><span class="p">):</span>
+        <span class="n">tc_keys</span> <span class="o">=</span> <span class="n">true_tile_cat</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s2">&quot;n_sources&quot;</span> <span class="ow">in</span> <span class="n">tc_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">true_tile_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span>
+        <span class="n">first</span> <span class="o">=</span> <span class="n">true_tile_cat</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">tc_keys</span><span class="p">)[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">device</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="SourcesGating">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.SourcesGating">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SourcesGating</span><span class="p">(</span><span class="n">NllGating</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">:</span> <span class="n">TileCatalog</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">true_tile_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="StarGating">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.StarGating">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StarGating</span><span class="p">(</span><span class="n">NllGating</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">:</span> <span class="n">TileCatalog</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">true_tile_cat</span><span class="o">.</span><span class="n">star_bools</span><span class="p">,</span> <span class="s2">&quot;b ht wt 1 1 -&gt; b ht wt&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="GalaxyGating">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.GalaxyGating">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GalaxyGating</span><span class="p">(</span><span class="n">NllGating</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">:</span> <span class="n">TileCatalog</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">true_tile_cat</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="p">,</span> <span class="s2">&quot;b ht wt 1 1 -&gt; b ht wt&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">VariationalFactor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n_params</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">,</span>
+        <span class="n">sample_rearrange</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">nll_rearrange</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">nll_gating</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_params</span> <span class="o">=</span> <span class="n">n_params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_rearrange</span> <span class="o">=</span> <span class="n">sample_rearrange</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nll_rearrange</span> <span class="o">=</span> <span class="n">nll_rearrange</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nll_gating</span> <span class="o">=</span> <span class="n">nll_gating</span> <span class="k">if</span> <span class="n">nll_gating</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">NullGating</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">qk</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">sample_cat</span> <span class="o">=</span> <span class="n">qk</span><span class="o">.</span><span class="n">mode</span> <span class="k">if</span> <span class="n">use_mode</span> <span class="k">else</span> <span class="n">qk</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_rearrange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sample_cat</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">sample_cat</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_rearrange</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">sample_cat</span><span class="o">.</span><span class="n">isfinite</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;sample_cat has invalid values: </span><span class="si">{</span><span class="n">sample_cat</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">return</span> <span class="n">sample_cat</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_nll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">true_tile_cat</span><span class="p">):</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="n">true_tile_cat</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nll_rearrange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nll_rearrange</span><span class="p">)</span>
+
+        <span class="n">gating</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nll_gating</span><span class="p">(</span><span class="n">true_tile_cat</span><span class="p">)</span>
+
+        <span class="n">qk</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">gating</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">gating</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">gating</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">target</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">target</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+        <span class="n">ungated_nll</span> <span class="o">=</span> <span class="o">-</span><span class="n">qk</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ungated_nll</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="n">target</span><span class="o">.</span><span class="n">dim</span><span class="p">():</span>  <span class="c1"># (b, w, h, 1) -&gt; (b,w,h) silent error</span>
+            <span class="n">ungated_nll</span> <span class="o">=</span> <span class="n">ungated_nll</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ungated_nll</span> <span class="o">*</span> <span class="n">gating</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">BernoulliFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">yes_prob</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">()</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mf">1e-4</span><span class="p">,</span> <span class="mi">1</span> <span class="o">-</span> <span class="mf">1e-4</span><span class="p">)</span>
+        <span class="n">no_yes_prob</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="mi">1</span> <span class="o">-</span> <span class="n">yes_prob</span><span class="p">,</span> <span class="n">yes_prob</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="c1"># this next line may be helpful with nans encountered during training with fp16s</span>
+        <span class="n">no_yes_prob</span> <span class="o">=</span> <span class="n">no_yes_prob</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">nan</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">no_yes_prob</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">NormalFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">low_clamp</span><span class="o">=-</span><span class="mi">20</span><span class="p">,</span> <span class="n">high_clamp</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span> <span class="o">=</span> <span class="n">low_clamp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span> <span class="o">=</span> <span class="n">high_clamp</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">sd</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">Normal</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">sd</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">BivariateNormalFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">low_clamp</span><span class="o">=-</span><span class="mi">20</span><span class="p">,</span> <span class="n">high_clamp</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span> <span class="o">=</span> <span class="n">low_clamp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span> <span class="o">=</span> <span class="n">high_clamp</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">sd</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">Independent</span><span class="p">(</span><span class="n">Normal</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">sd</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">IndependentMVNFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">low_clamp</span><span class="o">=-</span><span class="mi">20</span><span class="p">,</span> <span class="n">high_clamp</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">dim</span> <span class="o">+</span> <span class="n">dim</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span> <span class="o">=</span> <span class="n">low_clamp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span> <span class="o">=</span> <span class="n">high_clamp</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">]</span>
+        <span class="n">sd</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="p">:]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">Independent</span><span class="p">(</span><span class="n">Normal</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">sd</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MVNFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">low_clamp</span><span class="o">=-</span><span class="mi">20</span><span class="p">,</span> <span class="n">high_clamp</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">dim</span> <span class="o">+</span> <span class="n">dim</span> <span class="o">*</span> <span class="p">(</span><span class="n">dim</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span> <span class="o">=</span> <span class="n">low_clamp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span> <span class="o">=</span> <span class="n">high_clamp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">offdiag_rows</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">offdiag_cols</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tril_indices</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span> <span class="n">offset</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">loc</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">]</span>
+        <span class="n">scale_tril</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="o">*</span><span class="n">params</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">scale_tril</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">),</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">params</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="p">:</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)]</span>
+            <span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="n">scale_tril</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">offdiag_rows</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">offdiag_cols</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span> <span class="p">:]</span>
+        <span class="k">return</span> <span class="n">MultivariateNormal</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="n">loc</span><span class="p">,</span> <span class="n">scale_tril</span><span class="o">=</span><span class="n">scale_tril</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="TDBNFactor">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.TDBNFactor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TDBNFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Produces truncated bivariate normal distributions from unconstrained parameters.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">low_clamp</span><span class="o">=-</span><span class="mi">6</span><span class="p">,</span> <span class="n">high_clamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span> <span class="o">=</span> <span class="n">low_clamp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span> <span class="o">=</span> <span class="n">high_clamp</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">()</span>
+        <span class="n">sigma</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">low_clamp</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">high_clamp</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">mu</span><span class="o">.</span><span class="n">isnan</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">mu</span><span class="o">.</span><span class="n">isinf</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">(),</span> <span class="s2">&quot;mu contains invalid values&quot;</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">sigma</span><span class="o">.</span><span class="n">isnan</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">sigma</span><span class="o">.</span><span class="n">isinf</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">(),</span> <span class="s2">&quot;sigma contains invalid values&quot;</span>
+        <span class="k">return</span> <span class="n">TruncatedDiagonalMVN</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LogNormalFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>  <span class="c1"># the dimension of a multivariate lognormal</span>
+        <span class="n">n_params</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">dim</span>  <span class="c1"># mean and std for each dimension (diagonal covariance)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">n_params</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">0</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">-</span><span class="mi">40</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span>
+        <span class="n">sigma</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_params</span><span class="p">]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">-</span><span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="n">iid_dist</span> <span class="o">=</span> <span class="n">LogNormalEpsilon</span><span class="p">(</span>
+            <span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>  <span class="c1"># may evaluate at 0 for masked tiles</span>
+        <span class="k">return</span> <span class="n">Independent</span><span class="p">(</span><span class="n">iid_dist</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LogitNormalFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>  <span class="c1"># the dimension of a multivariate logitnormal</span>
+        <span class="n">n_params</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="n">low</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="n">high</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">n_params</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">0</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">]</span>
+        <span class="n">sigma</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_params</span><span class="p">]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">RescaledLogitNormal</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">low</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">high</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">DiscretizedUnitBoxFactor</span><span class="p">(</span><span class="n">VariationalFactor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">DiscretizedUnitBox</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+
+<span class="c1">#####################</span>
+
+
+<div class="viewcode-block" id="DiscretizedUnitBox">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.DiscretizedUnitBox">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DiscretizedUnitBox</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A continuous bivariate distribution over the 2d unit box, with a discretized density.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">validate_args</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">64</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pdf_offset</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">((</span><span class="mi">64</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">logits</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DiscretizedUnitBox.sample">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.DiscretizedUnitBox.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="p">()):</span>
+        <span class="n">locbins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+        <span class="n">locbins2d</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">locbins</span> <span class="o">//</span> <span class="mi">8</span><span class="p">,</span> <span class="n">locbins</span> <span class="o">%</span> <span class="mi">8</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">locbins2d_float</span> <span class="o">=</span> <span class="n">locbins2d</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">locbins2d_float</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand_like</span><span class="p">(</span><span class="n">locbins2d_float</span><span class="p">))</span> <span class="o">/</span> <span class="mi">8</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">locbins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">locbins2d</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">locbins</span> <span class="o">//</span> <span class="mi">8</span><span class="p">,</span> <span class="n">locbins</span> <span class="o">%</span> <span class="mi">8</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">locbins2d</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">/</span> <span class="mi">8</span>
+
+<div class="viewcode-block" id="DiscretizedUnitBox.log_prob">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.DiscretizedUnitBox.log_prob">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="n">locs</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span> <span class="o">-</span> <span class="mf">1e-7</span><span class="p">)</span>
+        <span class="n">locbins2d</span> <span class="o">=</span> <span class="p">(</span><span class="n">locs</span> <span class="o">*</span> <span class="mi">8</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">locbins</span> <span class="o">=</span> <span class="n">locbins2d</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">+</span> <span class="n">locbins2d</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">locbins</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">pdf_offset</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TruncatedDiagonalMVN">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.TruncatedDiagonalMVN">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TruncatedDiagonalMVN</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A truncated diagonal multivariate normal distribution.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize a truncated diagonal multivariate normal distribution.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            mu (Tensor): Mean of the distribution (must be at least 1d)</span>
+<span class="sd">            sigma (Tensor): Standard deviation of the distribution (must be at least 1d)</span>
+
+<span class="sd">        Distribution is &quot;multivariate&quot; in that the last dimension of mu and sigma</span>
+<span class="sd">        are considered event dimensions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">validate_args</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">multiple_normals</span> <span class="o">=</span> <span class="n">Normal</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span>  <span class="c1"># all dims are batch dims, none are event</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span> <span class="o">=</span> <span class="n">Independent</span><span class="p">(</span><span class="n">multiple_normals</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># now last dim is event dim</span>
+
+        <span class="c1"># we&#39;ll need these calculations later for log_prob</span>
+        <span class="n">prob_in_unit_box_hw</span> <span class="o">=</span> <span class="n">multiple_normals</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span> <span class="o">-</span> <span class="n">multiple_normals</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_event_prob_in_unit_box</span> <span class="o">=</span> <span class="n">prob_in_unit_box_hw</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_in_unit_box</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_event_prob_in_unit_box</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">base_dist</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+<div class="viewcode-block" id="TruncatedDiagonalMVN.sample">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.TruncatedDiagonalMVN.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="p">()):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate sample.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            sample_shape (Tuple): Shape of samples to draw</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">sample_shape</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_shape</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_shape</span>
+
+        <span class="c1"># draw using inverse cdf method</span>
+        <span class="c1"># if Fi is the cdf of the relavant gaussian, then</span>
+        <span class="c1"># Gi(u) = Fi(u*(F(b) - F(a)) + F(a)) is the cdf of the truncated gaussian</span>
+        <span class="n">uniform01_samples</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">mean</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">uniform_fafb</span> <span class="o">=</span> <span class="n">uniform01_samples</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">upper_cdf</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">lower_cdf</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lower_cdf</span>
+        <span class="n">trunc_normal_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">icdf</span><span class="p">(</span><span class="n">uniform_fafb</span><span class="p">)</span>
+
+        <span class="c1"># if u_transformed is within machine precision of 0 or 1</span>
+        <span class="c1"># the icdf will be -inf or inf, respectively, so we have to clamp</span>
+        <span class="k">return</span> <span class="n">trunc_normal_samples</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">a</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">mean</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">b</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">mean</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lower_cdf</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">upper_cdf</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">mean</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+        <span class="n">offset</span> <span class="o">/=</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_in_unit_box</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">mu</span> <span class="o">+</span> <span class="p">(</span><span class="n">offset</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">stddev</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stddev</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># See https://arxiv.org/pdf/1206.5387.pdf for the formula for the variance of a truncated</span>
+        <span class="c1"># multivariate normal. The covariance terms simplify since our dimensions are independent,</span>
+        <span class="c1"># but it&#39;s still tricky to compute.</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Standard deviation for truncated normal is not implemented yet&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># a mode still exists if this assertion is false, but I haven&#39;t implemented code</span>
+        <span class="c1"># to compute it because I don&#39;t think we need it</span>
+        <span class="k">assert</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">mean</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">mean</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">mode</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">batch_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">batch_shape</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">event_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">event_shape</span>
+
+<div class="viewcode-block" id="TruncatedDiagonalMVN.log_prob">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.TruncatedDiagonalMVN.log_prob">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="p">(</span><span class="n">value</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="ow">and</span> <span class="p">(</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="c1"># subtracting log probability that the base RV is in the unit box</span>
+        <span class="c1"># is equivalent in log space to dividing the normal pdf by the normalizing constant</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_in_unit_box</span></div>
+
+
+<div class="viewcode-block" id="TruncatedDiagonalMVN.cdf">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.TruncatedDiagonalMVN.cdf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cdf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="n">cdf_at_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">cdf_at_lb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lower_cdf</span>
+        <span class="n">log_cdf</span> <span class="o">=</span> <span class="p">(</span><span class="n">cdf_at_val</span> <span class="o">-</span> <span class="n">cdf_at_lb</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_in_unit_box</span>
+        <span class="k">return</span> <span class="n">log_cdf</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">event_cdf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="n">cdf_at_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">cdf_at_lb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lower_cdf</span>
+        <span class="n">log_cdf</span> <span class="o">=</span> <span class="p">(</span><span class="n">cdf_at_val</span> <span class="o">-</span> <span class="n">cdf_at_lb</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_event_prob_in_unit_box</span>
+        <span class="k">return</span> <span class="n">log_cdf</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">event_icdf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">lower_cdf</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">assert</span> <span class="p">(</span><span class="n">value</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="ow">and</span> <span class="p">(</span><span class="n">value</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="n">converted_cdf</span> <span class="o">=</span> <span class="n">value</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">upper_cdf</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">lower_cdf</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lower_cdf</span>
+        <span class="n">converted_icdf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">icdf</span><span class="p">(</span><span class="n">converted_cdf</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">converted_icdf</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RescaledLogitNormal">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.RescaledLogitNormal">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RescaledLogitNormal</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">validate_args</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="n">low</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="n">high</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">mu</span> <span class="o">=</span> <span class="n">mu</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span> <span class="o">=</span> <span class="n">sigma</span>
+
+        <span class="n">base_dist</span> <span class="o">=</span> <span class="n">Normal</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span>
+        <span class="n">transforms</span> <span class="o">=</span> <span class="p">[</span><span class="n">SigmoidTransform</span><span class="p">(),</span> <span class="n">AffineTransform</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">low</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">high</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">iid_dist</span> <span class="o">=</span> <span class="n">TransformedDistribution</span><span class="p">(</span><span class="n">base_dist</span><span class="p">,</span> <span class="n">transforms</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RescaledLogitNormal.sample">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.RescaledLogitNormal.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">iid_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RescaledLogitNormal.log_prob">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.RescaledLogitNormal.log_prob">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">iid_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># this is actual the median, not the mode. The median is suitable as a point estimate</span>
+        <span class="c1"># and the mode doesn&#39;t have an analytic form.</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">iid_dist</span><span class="o">.</span><span class="n">icdf</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.5</span><span class="p">))</span></div>
+
+
+
+<span class="n">empty_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([])</span>
+
+
+<div class="viewcode-block" id="LogNormalEpsilon">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.LogNormalEpsilon">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LogNormalEpsilon</span><span class="p">(</span><span class="n">LogNormal</span><span class="p">):</span>
+<div class="viewcode-block" id="LogNormalEpsilon.sample">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.LogNormalEpsilon.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">empty_shape</span><span class="p">):</span>
+        <span class="n">sample</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+        <span class="n">max_value</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">sample</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">max</span>
+        <span class="k">return</span> <span class="n">sample</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mf">1e-9</span><span class="p">,</span> <span class="n">max_value</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LogNormalEpsilon.log_prob">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.variational_dist.LogNormalEpsilon.log_prob">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

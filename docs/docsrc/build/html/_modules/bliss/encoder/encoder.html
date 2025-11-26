@@ -1,0 +1,569 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss.encoder.encoder &mdash; bliss  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bliss.encoder.encoder</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bliss.encoder.encoder</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytorch_lightning</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pl</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Categorical</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim</span><span class="w"> </span><span class="kn">import</span> <span class="n">Adam</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim.lr_scheduler</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiStepLR</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchmetrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">MetricCollection</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">TileCatalog</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.encoder.convnet_layers</span><span class="w"> </span><span class="kn">import</span> <span class="n">C3</span><span class="p">,</span> <span class="n">ConvBlock</span><span class="p">,</span> <span class="n">Detect</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.encoder.convnets</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeaturesNet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.encoder.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">CatalogMatcher</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.encoder.variational_dist</span><span class="w"> </span><span class="kn">import</span> <span class="n">VariationalDist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.global_env</span><span class="w"> </span><span class="kn">import</span> <span class="n">GlobalEnv</span>
+
+
+<div class="viewcode-block" id="Encoder">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Encoder</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Encodes the distribution of a latent variable representing an astronomical image.</span>
+
+<span class="sd">    This class implements the source encoder, which is supposed to take in</span>
+<span class="sd">    an astronomical image of size slen * slen and returns a NN latent variable</span>
+<span class="sd">    representation of this image.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">survey_bands</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">image_normalizers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">var_dist</span><span class="p">:</span> <span class="n">VariationalDist</span><span class="p">,</span>
+        <span class="n">matcher</span><span class="p">:</span> <span class="n">CatalogMatcher</span><span class="p">,</span>
+        <span class="n">sample_image_renders</span><span class="p">:</span> <span class="n">MetricCollection</span><span class="p">,</span>
+        <span class="n">mode_metrics</span><span class="p">:</span> <span class="n">MetricCollection</span><span class="p">,</span>
+        <span class="n">sample_metrics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MetricCollection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimizer_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">scheduler_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_double_detect</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_checkerboard</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">n_sampler_colors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">reference_band</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">predict_mode_not_samples</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">minimalist_conditioning</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">any_order_training</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializes Encoder.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            survey_bands: all band-pass filters available for this survey</span>
+<span class="sd">            tile_slen: dimension in pixels of a square tile</span>
+<span class="sd">            image_normalizers: collection of objects that applies input transforms to images</span>
+<span class="sd">            var_dist: object that makes a variational distribution from raw convnet output</span>
+<span class="sd">            matcher: for matching predicted catalogs to ground truth catalogs</span>
+<span class="sd">            sample_image_renders: for plotting relevant images (overlays, shear maps)</span>
+<span class="sd">            mode_metrics: for scoring predicted mode catalogs during training</span>
+<span class="sd">            sample_metrics: for scoring predicted sampled catalogs during training</span>
+<span class="sd">            optimizer_params: arguments passed to the Adam optimizer</span>
+<span class="sd">            scheduler_params: arguments passed to the learning rate scheduler</span>
+<span class="sd">            use_double_detect: whether to make up to two detections per tile rather than one</span>
+<span class="sd">            use_checkerboard: whether to use dependent tiling</span>
+<span class="sd">            n_sampler_colors: number of colors to use for checkerboard sampling</span>
+<span class="sd">            reference_band: band to use for filtering sources</span>
+<span class="sd">            predict_mode_not_samples: whether to predict mode catalogs rather than sample catalogs</span>
+<span class="sd">            minimalist_conditioning: whether to condition on only detection history</span>
+<span class="sd">            any_order_training: whether to enable any-order training mode</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">survey_bands</span> <span class="o">=</span> <span class="n">survey_bands</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_normalizers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">(</span><span class="n">image_normalizers</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span> <span class="o">=</span> <span class="n">var_dist</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode_metrics</span> <span class="o">=</span> <span class="n">mode_metrics</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span> <span class="o">=</span> <span class="n">sample_metrics</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_image_renders</span> <span class="o">=</span> <span class="n">sample_image_renders</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">matcher</span> <span class="o">=</span> <span class="n">matcher</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer_params</span> <span class="o">=</span> <span class="n">optimizer_params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scheduler_params</span> <span class="o">=</span> <span class="n">scheduler_params</span> <span class="k">if</span> <span class="n">scheduler_params</span> <span class="k">else</span> <span class="p">{</span><span class="s2">&quot;milestones&quot;</span><span class="p">:</span> <span class="p">[]}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_double_detect</span> <span class="o">=</span> <span class="n">use_double_detect</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_checkerboard</span> <span class="o">=</span> <span class="n">use_checkerboard</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_sampler_colors</span> <span class="o">=</span> <span class="n">n_sampler_colors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span> <span class="o">=</span> <span class="n">reference_band</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">predict_mode_not_samples</span> <span class="o">=</span> <span class="n">predict_mode_not_samples</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">minimalist_conditioning</span> <span class="o">=</span> <span class="n">minimalist_conditioning</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">any_order_training</span> <span class="o">=</span> <span class="n">any_order_training</span>
+
+        <span class="c1"># Generate all binary combinations for n^2 elements</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="mi">2</span>
+        <span class="n">binary_combinations</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">product</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">repeat</span><span class="o">=</span><span class="n">n</span> <span class="o">*</span> <span class="n">n</span><span class="p">))</span>
+        <span class="n">mask_patterns</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">binary_combinations</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>  <span class="c1"># noqa: WPS114</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;mask_patterns&quot;</span><span class="p">,</span> <span class="n">mask_patterns</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialize_networks</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialize_networks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="ow">in</span> <span class="p">{</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">},</span> <span class="s2">&quot;tile_slen must be 2 or 4&quot;</span>
+        <span class="n">ch_per_band</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">inorm</span><span class="o">.</span><span class="n">num_channels_per_band</span><span class="p">()</span> <span class="k">for</span> <span class="n">inorm</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_normalizers</span><span class="p">)</span>
+        <span class="n">num_features</span> <span class="o">=</span> <span class="mi">256</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">features_net</span> <span class="o">=</span> <span class="n">FeaturesNet</span><span class="p">(</span>
+            <span class="n">n_bands</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey_bands</span><span class="p">),</span>
+            <span class="n">ch_per_band</span><span class="o">=</span><span class="n">ch_per_band</span><span class="p">,</span>
+            <span class="n">num_features</span><span class="o">=</span><span class="n">num_features</span><span class="p">,</span>
+            <span class="n">double_downsample</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">==</span> <span class="mi">4</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">context_ch_out</span> <span class="o">=</span> <span class="mi">128</span>
+        <span class="n">context_dim</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">minimalist_conditioning</span> <span class="k">else</span> <span class="mi">3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">color_context_net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">ConvBlock</span><span class="p">(</span><span class="n">context_dim</span><span class="p">,</span> <span class="n">context_ch_out</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">C3</span><span class="p">(</span><span class="n">context_ch_out</span><span class="p">,</span> <span class="n">context_ch_out</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">spatial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">ConvBlock</span><span class="p">(</span><span class="n">context_ch_out</span><span class="p">,</span> <span class="n">context_ch_out</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">in_ch_count</span> <span class="o">=</span> <span class="n">num_features</span> <span class="o">+</span> <span class="n">context_ch_out</span>
+        <span class="n">n_hidden_ch</span> <span class="o">=</span> <span class="mi">256</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count_net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">ConvBlock</span><span class="p">(</span><span class="n">in_ch_count</span><span class="p">,</span> <span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">C3</span><span class="p">(</span><span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">spatial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">ConvBlock</span><span class="p">(</span><span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">Detect</span><span class="p">(</span><span class="n">n_hidden_ch</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">x_empty_context</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">context_ch_out</span><span class="p">)</span>
+
+        <span class="n">local_dim</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">minimalist_conditioning</span> <span class="k">else</span> <span class="mi">3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_context_net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">ConvBlock</span><span class="p">(</span><span class="n">local_dim</span><span class="p">,</span> <span class="n">context_ch_out</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">C3</span><span class="p">(</span><span class="n">context_ch_out</span><span class="p">,</span> <span class="n">context_ch_out</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">spatial</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">ConvBlock</span><span class="p">(</span><span class="n">context_ch_out</span><span class="p">,</span> <span class="n">context_ch_out</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">in_ch</span> <span class="o">=</span> <span class="n">num_features</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">context_ch_out</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detection_net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">ConvBlock</span><span class="p">(</span><span class="n">in_ch</span><span class="p">,</span> <span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">C3</span><span class="p">(</span><span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">n_hidden_ch</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">spatial</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">gn</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">Detect</span><span class="p">(</span><span class="n">n_hidden_ch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span><span class="o">.</span><span class="n">n_params_per_source</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_local_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">history_cat</span><span class="p">):</span>
+        <span class="n">centered_locs</span> <span class="o">=</span> <span class="n">history_cat</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="mf">0.5</span>
+        <span class="n">log_fluxes</span> <span class="o">=</span> <span class="p">(</span><span class="n">history_cat</span><span class="o">.</span><span class="n">on_fluxes</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
+        <span class="n">history_encoding_lst</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">centered_locs</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">history_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">],</span>  <span class="c1"># x history</span>
+            <span class="n">centered_locs</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">history_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">],</span>  <span class="c1"># y history</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">minimalist_conditioning</span><span class="p">:</span>
+            <span class="n">history_encoding_lst</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">log_fluxes</span> <span class="o">*</span> <span class="n">history_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span>
+
+        <span class="n">local_context</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">history_encoding_lst</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_context_net</span><span class="p">(</span><span class="n">local_context</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">detect_second</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_features_color</span><span class="p">,</span> <span class="n">history_cat</span><span class="p">):</span>
+        <span class="n">x_local_context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_local_context</span><span class="p">(</span><span class="n">history_cat</span><span class="p">)</span>
+        <span class="n">x_feature_color_local</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">x_features_color</span><span class="p">,</span> <span class="n">x_local_context</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_net</span><span class="p">(</span><span class="n">x_feature_color_local</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">detect_first</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_features_color</span><span class="p">):</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">_n_features</span><span class="p">,</span> <span class="n">ht</span><span class="p">,</span> <span class="n">wt</span> <span class="o">=</span> <span class="n">x_features_color</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="n">xec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">x_empty_context</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">ht</span><span class="p">,</span> <span class="n">wt</span><span class="p">)</span>
+        <span class="n">x_feature_color_empty</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">x_features_color</span><span class="p">,</span> <span class="n">xec</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_net</span><span class="p">(</span><span class="n">x_feature_color_empty</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_color_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">history_cat</span><span class="p">,</span> <span class="n">history_mask</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">history_cat</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># detections (1), flux (1), and locs (2) are the properties we condition on</span>
+            <span class="n">dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">minimalist_conditioning</span> <span class="k">else</span> <span class="mi">2</span>
+            <span class="n">masked_history</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">history_mask</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">masked_history</span> <span class="o">=</span> <span class="n">masked_history</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">history_cat1</span> <span class="o">=</span> <span class="n">history_cat</span><span class="o">.</span><span class="n">get_brightest_sources_per_tile</span><span class="p">(</span>
+                <span class="n">band</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span><span class="p">,</span> <span class="n">exclude_num</span><span class="o">=</span><span class="mi">0</span>
+            <span class="p">)</span>
+            <span class="n">history_cat2</span> <span class="o">=</span> <span class="n">history_cat</span><span class="o">.</span><span class="n">get_brightest_sources_per_tile</span><span class="p">(</span>
+                <span class="n">band</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span><span class="p">,</span> <span class="n">exclude_num</span><span class="o">=</span><span class="mi">1</span>
+            <span class="p">)</span>
+
+            <span class="n">fluxes1</span> <span class="o">=</span> <span class="n">history_cat1</span><span class="o">.</span><span class="n">on_fluxes</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">fluxes2</span> <span class="o">=</span> <span class="n">history_cat2</span><span class="o">.</span><span class="n">on_fluxes</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">log_fluxes</span> <span class="o">=</span> <span class="p">(</span><span class="n">fluxes1</span> <span class="o">+</span> <span class="n">fluxes2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
+
+            <span class="n">history_encoding_lst</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">history_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">(),</span>  <span class="c1"># detection history</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">minimalist_conditioning</span><span class="p">:</span>
+                <span class="n">history_encoding_lst</span> <span class="o">+=</span> <span class="p">[</span>
+                    <span class="n">log_fluxes</span><span class="p">,</span>  <span class="c1"># flux history</span>
+                <span class="p">]</span>
+            <span class="n">history_stack</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">history_encoding_lst</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">masked_history</span> <span class="o">=</span> <span class="n">history_stack</span> <span class="o">*</span> <span class="n">history_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">color_context</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">history_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">masked_history</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">color_context_net</span><span class="p">(</span><span class="n">color_context</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">%</span> <span class="mi">16</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;image dims must be multiples of 16&quot;</span>
+        <span class="k">assert</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">%</span> <span class="mi">16</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;image dims must be multiples of 16&quot;</span>
+
+        <span class="n">input_lst</span> <span class="o">=</span> <span class="p">[</span><span class="n">inorm</span><span class="o">.</span><span class="n">get_input_tensor</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="k">for</span> <span class="n">inorm</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_normalizers</span><span class="p">]</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">input_lst</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">features_net</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="n">x_features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_features</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">_n_features</span><span class="p">,</span> <span class="n">ht</span><span class="p">,</span> <span class="n">wt</span> <span class="o">=</span> <span class="n">x_features</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_checkerboard</span><span class="p">:</span>
+            <span class="n">patterns_to_use</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sampler_colors</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">patterns_to_use</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">14</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sampler_colors</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">patterns_to_use</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;n_colors must be 2 or 4&quot;</span><span class="p">)</span>
+
+        <span class="n">est_cat</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">for</span> <span class="n">mask_pattern</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_patterns</span><span class="p">[</span><span class="n">patterns_to_use</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+            <span class="n">history_mask</span> <span class="o">=</span> <span class="n">mask_pattern</span><span class="o">.</span><span class="n">repeat</span><span class="p">([</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">ht</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">wt</span> <span class="o">//</span> <span class="mi">2</span><span class="p">])</span>
+            <span class="n">x_color_context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_color_context</span><span class="p">(</span><span class="n">est_cat</span><span class="p">,</span> <span class="n">history_mask</span><span class="p">)</span>
+
+            <span class="n">x_features_color</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">x_features</span><span class="p">,</span> <span class="n">x_color_context</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">count_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">count_net</span><span class="p">(</span><span class="n">x_features_color</span><span class="p">)</span>
+            <span class="n">count_rv</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">count_params</span><span class="p">)</span>
+            <span class="n">n_sources</span> <span class="o">=</span> <span class="n">count_rv</span><span class="o">.</span><span class="n">mode</span> <span class="k">if</span> <span class="n">use_mode</span> <span class="k">else</span> <span class="n">count_rv</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+            <span class="n">x_cat_marginal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">detect_first</span><span class="p">(</span><span class="n">x_features_color</span><span class="p">)</span>
+            <span class="n">new_est_cat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">x_cat_marginal</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="n">use_mode</span><span class="p">)</span>
+            <span class="n">new_est_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_sources</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_double_detect</span><span class="p">:</span>
+                <span class="n">x_cat_cond</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">detect_second</span><span class="p">(</span><span class="n">x_features_color</span><span class="p">,</span> <span class="n">new_est_cat</span><span class="p">)</span>
+
+                <span class="n">new_est_cat2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">x_cat_cond</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="n">use_mode</span><span class="p">)</span>
+                <span class="n">new_est_cat2</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_sources</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+                <span class="n">new_est_cat</span> <span class="o">=</span> <span class="n">new_est_cat</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">new_est_cat2</span><span class="p">,</span> <span class="n">disjoint</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="n">new_est_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">*=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">history_mask</span>
+            <span class="k">if</span> <span class="n">est_cat</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">est_cat</span> <span class="o">=</span> <span class="n">new_est_cat</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">est_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">*=</span> <span class="n">history_mask</span>
+                <span class="n">est_cat</span> <span class="o">=</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">new_est_cat</span><span class="p">,</span> <span class="n">disjoint</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">est_cat</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_masked_nll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">history_mask_patterns</span><span class="p">,</span> <span class="n">loss_mask_patterns</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">history_mask_patterns</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">loss_mask_patterns</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">_n_bands</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">w</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="n">ht</span><span class="p">,</span> <span class="n">wt</span> <span class="o">=</span> <span class="n">h</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">w</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span>
+
+        <span class="n">target_cat</span> <span class="o">=</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="n">batch</span><span class="p">[</span><span class="s2">&quot;tile_catalog&quot;</span><span class="p">])</span>
+        <span class="n">target_cat1</span> <span class="o">=</span> <span class="n">target_cat</span><span class="o">.</span><span class="n">get_brightest_sources_per_tile</span><span class="p">(</span>
+            <span class="n">band</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span><span class="p">,</span> <span class="n">exclude_num</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="n">target_cat2</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Will be set if use_double_detect is True</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_double_detect</span><span class="p">:</span>
+            <span class="n">target_cat2</span> <span class="o">=</span> <span class="n">target_cat</span><span class="o">.</span><span class="n">get_brightest_sources_per_tile</span><span class="p">(</span>
+                <span class="n">band</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span><span class="p">,</span> <span class="n">exclude_num</span><span class="o">=</span><span class="mi">1</span>
+            <span class="p">)</span>
+
+        <span class="n">x_features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_features</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x_features</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+
+        <span class="k">for</span> <span class="n">hmp</span><span class="p">,</span> <span class="n">lmp</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">history_mask_patterns</span><span class="p">,</span> <span class="n">loss_mask_patterns</span><span class="p">):</span>
+            <span class="n">history_mask</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">repeat</span><span class="p">([</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">ht</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">wt</span> <span class="o">//</span> <span class="mi">2</span><span class="p">])</span>
+            <span class="n">x_color_context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_color_context</span><span class="p">(</span><span class="n">target_cat</span><span class="p">,</span> <span class="n">history_mask</span><span class="p">)</span>
+            <span class="n">x_features_color</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">x_features</span><span class="p">,</span> <span class="n">x_color_context</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="n">count_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">count_net</span><span class="p">(</span><span class="n">x_features_color</span><span class="p">)</span>
+            <span class="n">count_rv</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">count_params</span><span class="p">)</span>
+            <span class="n">local_loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">count_rv</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">target_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+            <span class="n">x_cat_marginal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">detect_first</span><span class="p">(</span><span class="n">x_features_color</span><span class="p">)</span>
+            <span class="n">nll_marginal_z1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span><span class="o">.</span><span class="n">compute_nll</span><span class="p">(</span><span class="n">x_cat_marginal</span><span class="p">,</span> <span class="n">target_cat1</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_double_detect</span><span class="p">:</span>
+                <span class="n">local_loss</span> <span class="o">+=</span> <span class="n">nll_marginal_z1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">nll_marginal_z2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span><span class="o">.</span><span class="n">compute_nll</span><span class="p">(</span><span class="n">x_cat_marginal</span><span class="p">,</span> <span class="n">target_cat2</span><span class="p">)</span>
+
+                <span class="n">x_cat_cond1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">detect_second</span><span class="p">(</span><span class="n">x_features_color</span><span class="p">,</span> <span class="n">target_cat1</span><span class="p">)</span>
+                <span class="n">nll_cond_z2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span><span class="o">.</span><span class="n">compute_nll</span><span class="p">(</span><span class="n">x_cat_cond1</span><span class="p">,</span> <span class="n">target_cat2</span><span class="p">)</span>
+
+                <span class="n">x_cat_cond2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">detect_second</span><span class="p">(</span><span class="n">x_features_color</span><span class="p">,</span> <span class="n">target_cat2</span><span class="p">)</span>
+                <span class="n">nll_cond_z1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_dist</span><span class="o">.</span><span class="n">compute_nll</span><span class="p">(</span><span class="n">x_cat_cond2</span><span class="p">,</span> <span class="n">target_cat1</span><span class="p">)</span>
+
+                <span class="n">one_mask</span> <span class="o">=</span> <span class="n">target_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="n">loss1</span> <span class="o">=</span> <span class="n">nll_marginal_z1</span> <span class="o">*</span> <span class="n">one_mask</span>
+
+                <span class="n">two_mask</span> <span class="o">=</span> <span class="n">target_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">2</span>
+                <span class="n">loss2a</span> <span class="o">=</span> <span class="n">nll_marginal_z1</span> <span class="o">+</span> <span class="n">nll_cond_z2</span>
+                <span class="n">loss2b</span> <span class="o">=</span> <span class="n">nll_marginal_z2</span> <span class="o">+</span> <span class="n">nll_cond_z1</span>
+                <span class="n">lse_stack</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">loss2a</span><span class="p">,</span> <span class="n">loss2b</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">loss2_unmasked</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">logsumexp</span><span class="p">(</span><span class="o">-</span><span class="n">lse_stack</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">loss2</span> <span class="o">=</span> <span class="n">loss2_unmasked</span> <span class="o">*</span> <span class="n">two_mask</span>
+
+                <span class="n">local_loss</span> <span class="o">+=</span> <span class="n">loss1</span> <span class="o">+</span> <span class="n">loss2</span>
+
+            <span class="n">loss_mask</span> <span class="o">=</span> <span class="n">lmp</span><span class="o">.</span><span class="n">repeat</span><span class="p">([</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">ht</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">wt</span> <span class="o">//</span> <span class="mi">2</span><span class="p">])</span>
+            <span class="n">loss</span> <span class="o">+=</span> <span class="n">local_loss</span> <span class="o">*</span> <span class="n">loss_mask</span>
+
+        <span class="c1"># equals 1 if loss is unmasked for as many tiles as there are tiles;</span>
+        <span class="c1"># reduces variation for random patterns</span>
+        <span class="n">loss1_normalizer</span> <span class="o">=</span> <span class="n">loss_mask_patterns</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="mi">4</span>
+        <span class="n">loss</span> <span class="o">/=</span> <span class="n">loss1_normalizer</span>
+
+        <span class="k">return</span> <span class="n">loss</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_sampler_nll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_checkerboard</span><span class="p">:</span>
+            <span class="n">history_pattern_ids</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,)</span>
+            <span class="n">loss_pattern_ids</span> <span class="o">=</span> <span class="p">(</span><span class="mi">15</span><span class="p">,)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sampler_colors</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">history_pattern_ids</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">14</span><span class="p">)</span>
+            <span class="n">loss_pattern_ids</span> <span class="o">=</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sampler_colors</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">history_pattern_ids</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+            <span class="n">loss_pattern_ids</span> <span class="o">=</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;n_sampler_colors must be 2 or 4&quot;</span><span class="p">)</span>
+
+        <span class="n">history_mask_patterns</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_patterns</span><span class="p">[</span><span class="n">history_pattern_ids</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+        <span class="n">loss_mask_patterns</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_patterns</span><span class="p">[</span><span class="n">loss_pattern_ids</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_masked_nll</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">history_mask_patterns</span><span class="p">,</span> <span class="n">loss_mask_patterns</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">logging_name</span><span class="p">):</span>
+        <span class="c1"># could use all the mask patterns but memory is tight</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">any_order_training</span><span class="p">:</span>
+            <span class="n">patterns_to_use</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="mi">15</span><span class="p">)[:</span><span class="mi">4</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_checkerboard</span> <span class="k">else</span> <span class="p">(</span><span class="mi">0</span><span class="p">,)</span>
+            <span class="n">history_mask_patterns</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_patterns</span><span class="p">[</span><span class="n">patterns_to_use</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+            <span class="n">loss_mask_patterns</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">history_mask_patterns</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_masked_nll</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">history_mask_patterns</span><span class="p">,</span> <span class="n">loss_mask_patterns</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_sampler_nll</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">loss</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">logging_name</span><span class="si">}</span><span class="s2">/_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">sync_dist</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">loss</span>
+
+<div class="viewcode-block" id="Encoder.on_fit_start">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.on_fit_start">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_fit_start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">GlobalEnv</span><span class="o">.</span><span class="n">current_encoder_epoch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_epoch</span></div>
+
+
+<div class="viewcode-block" id="Encoder.on_train_epoch_start">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.on_train_epoch_start">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_train_epoch_start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">GlobalEnv</span><span class="o">.</span><span class="n">current_encoder_epoch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_epoch</span></div>
+
+
+<div class="viewcode-block" id="Encoder.training_step">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.training_step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Training step (pytorch lightning).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;train&quot;</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
+        <span class="n">target_tile_cat</span> <span class="o">=</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="n">batch</span><span class="p">[</span><span class="s2">&quot;tile_catalog&quot;</span><span class="p">])</span>
+        <span class="n">target_cat</span> <span class="o">=</span> <span class="n">target_tile_cat</span><span class="o">.</span><span class="n">to_full_catalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span>
+
+        <span class="n">mode_tile_cat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">mode_cat</span> <span class="o">=</span> <span class="n">mode_tile_cat</span><span class="o">.</span><span class="n">to_full_catalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span>
+        <span class="n">mode_matching</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">matcher</span><span class="o">.</span><span class="n">match_catalogs</span><span class="p">(</span><span class="n">target_cat</span><span class="p">,</span> <span class="n">mode_cat</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode_metrics</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">target_cat</span><span class="p">,</span> <span class="n">mode_cat</span><span class="p">,</span> <span class="n">mode_matching</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sample_tile_cat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">sample_cat</span> <span class="o">=</span> <span class="n">sample_tile_cat</span><span class="o">.</span><span class="n">to_full_catalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span>
+            <span class="n">sample_matching</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">matcher</span><span class="o">.</span><span class="n">match_catalogs</span><span class="p">(</span><span class="n">target_cat</span><span class="p">,</span> <span class="n">sample_cat</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">target_cat</span><span class="p">,</span> <span class="n">sample_cat</span><span class="p">,</span> <span class="n">sample_matching</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_image_renders</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sample_image_renders</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">batch</span><span class="p">,</span>
+                <span class="n">target_cat</span><span class="p">,</span>
+                <span class="n">mode_tile_cat</span><span class="p">,</span>
+                <span class="n">mode_cat</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">current_epoch</span><span class="p">,</span>
+                <span class="n">batch_idx</span><span class="p">,</span>
+            <span class="p">)</span>
+
+<div class="viewcode-block" id="Encoder.validation_step">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.validation_step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validation_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pytorch lightning method.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compute_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">)</span>
+
+        <span class="n">nll</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_sampler_nll</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;val/nll&quot;</span><span class="p">,</span> <span class="n">nll</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_metrics</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">report_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">,</span> <span class="n">logging_name</span><span class="p">,</span> <span class="n">show_epoch</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">logging_name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">sync_dist</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">metric_name</span><span class="p">,</span> <span class="n">metric</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">plot_or_none</span> <span class="o">=</span> <span class="n">metric</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="ow">and</span> <span class="n">plot_or_none</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Epoch_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">current_epoch</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">show_epoch</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">logging_name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">metric_name</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">fig</span><span class="p">,</span> <span class="n">_axes</span> <span class="o">=</span> <span class="n">plot_or_none</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">add_figure</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">fig</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Encoder.on_validation_epoch_end">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.on_validation_epoch_end">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_validation_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">report_metrics</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mode_metrics</span><span class="p">,</span> <span class="s2">&quot;val/mode&quot;</span><span class="p">,</span> <span class="n">show_epoch</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode_metrics</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">report_metrics</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span><span class="p">,</span> <span class="s2">&quot;val/sample&quot;</span><span class="p">,</span> <span class="n">show_epoch</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_image_renders</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">report_metrics</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sample_image_renders</span><span class="p">,</span> <span class="s2">&quot;val/image_renders&quot;</span><span class="p">,</span> <span class="n">show_epoch</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Encoder.test_step">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.test_step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pytorch lightning method.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compute_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_metrics</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Encoder.on_test_epoch_end">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.on_test_epoch_end">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_test_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># note: metrics are not reset here, to give notebooks access to them</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">report_metrics</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mode_metrics</span><span class="p">,</span> <span class="s2">&quot;test/mode&quot;</span><span class="p">,</span> <span class="n">show_epoch</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">report_metrics</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sample_metrics</span><span class="p">,</span> <span class="s2">&quot;test/sample&quot;</span><span class="p">,</span> <span class="n">show_epoch</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Encoder.predict_step">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.predict_step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">dataloader_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pytorch lightning method.&quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">use_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_mode_not_samples</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Encoder.configure_optimizers">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.encoder.encoder.Encoder.configure_optimizers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Configure optimizers for training (pytorch lightning).&quot;&quot;&quot;</span>
+        <span class="n">optimizer</span> <span class="o">=</span> <span class="n">Adam</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">optimizer_params</span><span class="p">)</span>
+        <span class="n">scheduler</span> <span class="o">=</span> <span class="n">MultiStepLR</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">scheduler_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">optimizer</span><span class="p">],</span> <span class="p">[</span><span class="n">scheduler</span><span class="p">]</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

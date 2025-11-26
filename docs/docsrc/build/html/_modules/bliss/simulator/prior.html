@@ -1,0 +1,339 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss.simulator.prior &mdash; bliss  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bliss.simulator.prior</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bliss.simulator.prior</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytorch_lightning</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pl</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">truncpareto</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gamma</span><span class="p">,</span> <span class="n">Poisson</span><span class="p">,</span> <span class="n">Uniform</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">TileCatalog</span>
+
+
+<div class="viewcode-block" id="CatalogPrior">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.prior.CatalogPrior">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CatalogPrior</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prior distribution of objects in an astronomical image.</span>
+
+<span class="sd">    After the module is initialized, sampling is done with the sample method.</span>
+<span class="sd">    The input parameters correspond to the number of sources, the fluxes, whether an</span>
+<span class="sd">    object is a galaxy or star, and the distributions of galaxy and star shapes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">survey_bands</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">n_tiles_h</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">n_tiles_w</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">min_sources</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_sources</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">mean_sources</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">prob_galaxy</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">star_flux</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">galaxy_flux</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">galaxy_a_concentration</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">galaxy_a_loc</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">galaxy_a_scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">galaxy_a_bd_ratio</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">star_color_model_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">gal_color_model_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">reference_band</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializes CatalogPrior.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            survey_bands: all band-pass filters available for this survey</span>
+<span class="sd">            n_tiles_h: Image height in tiles,</span>
+<span class="sd">            n_tiles_w: Image width in tiles,</span>
+<span class="sd">            batch_size: int,</span>
+<span class="sd">            min_sources: Minimum number of sources in a tile</span>
+<span class="sd">            max_sources: Maximum number of sources in a tile</span>
+<span class="sd">            mean_sources: Mean rate of sources appearing in a tile</span>
+<span class="sd">            prob_galaxy: Prior probability a source is a galaxy</span>
+<span class="sd">            star_flux: parameters of a truncated Pareto</span>
+<span class="sd">            galaxy_flux: parameters of a truncated Pareto</span>
+<span class="sd">            galaxy_a_concentration: ?</span>
+<span class="sd">            galaxy_a_loc: ?</span>
+<span class="sd">            galaxy_a_scale: galaxy scale</span>
+<span class="sd">            galaxy_a_bd_ratio: galaxy bulge-to-disk ratio</span>
+<span class="sd">            star_color_model_path: path specifying star color model</span>
+<span class="sd">            gal_color_model_path: path specifying galaxy color model</span>
+<span class="sd">            reference_band: int denoting index of reference band</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span> <span class="o">=</span> <span class="n">n_tiles_h</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span> <span class="o">=</span> <span class="n">n_tiles_w</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">survey_bands</span><span class="p">)</span>
+        <span class="c1"># NOTE: bands have to be non-empty</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bands</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_sources</span> <span class="o">=</span> <span class="n">min_sources</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span> <span class="o">=</span> <span class="n">max_sources</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mean_sources</span> <span class="o">=</span> <span class="n">mean_sources</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">prob_galaxy</span> <span class="o">=</span> <span class="n">prob_galaxy</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">star_flux</span> <span class="o">=</span> <span class="n">star_flux</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_flux</span> <span class="o">=</span> <span class="n">galaxy_flux</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_concentration</span> <span class="o">=</span> <span class="n">galaxy_a_concentration</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_loc</span> <span class="o">=</span> <span class="n">galaxy_a_loc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_scale</span> <span class="o">=</span> <span class="n">galaxy_a_scale</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_bd_ratio</span> <span class="o">=</span> <span class="n">galaxy_a_bd_ratio</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">star_color_model_path</span> <span class="o">=</span> <span class="n">star_color_model_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gal_color_model_path</span> <span class="o">=</span> <span class="n">gal_color_model_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span> <span class="o">=</span> <span class="n">reference_band</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gmm_star</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">gmm_gal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_color_models</span><span class="p">()</span>
+
+<div class="viewcode-block" id="CatalogPrior.sample">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.prior.CatalogPrior.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TileCatalog</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Samples latent variables from the prior of an astronomical image.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.</span>
+<span class="sd">            the first three dimensions of each tensor are</span>
+<span class="sd">            `(batch_size, self.n_tiles_h, self.n_tiles_w)`.</span>
+<span class="sd">            The remaining dimensions are variable-specific.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_galaxy_shape</span><span class="p">()</span>
+
+        <span class="n">d</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_locs</span><span class="p">()</span>
+        <span class="n">d</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_n_sources</span><span class="p">()</span>
+        <span class="n">d</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_source_type</span><span class="p">()</span>
+
+        <span class="n">star_fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_fluxes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gmm_star</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_flux</span><span class="p">)</span>
+        <span class="n">galaxy_fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_fluxes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gmm_gal</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_flux</span><span class="p">)</span>
+        <span class="n">d</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">],</span> <span class="n">galaxy_fluxes</span><span class="p">,</span> <span class="n">star_fluxes</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="n">d</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sample_n_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">latent_dims</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">)</span>
+        <span class="n">n_sources</span> <span class="o">=</span> <span class="n">Poisson</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mean_sources</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span>
+        <span class="n">n_sources</span> <span class="o">=</span> <span class="n">n_sources</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="nb">min</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_sources</span><span class="p">)</span>
+        <span class="c1"># long() is necessary here because the return value is used for indexing subsequently</span>
+        <span class="k">return</span> <span class="n">n_sources</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sample_locs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">latent_dims</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sample_source_type</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">latent_dims</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">uniform_aux_var</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="o">*</span><span class="n">latent_dims</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">uniform_aux_var</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">prob_galaxy</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_draw_truncated_pareto</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># could use PyTorch&#39;s Pareto instead, but would have to transform to truncate</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">truncpareto</span><span class="o">.</span><span class="n">rvs</span><span class="p">(</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;exponent&quot;</span><span class="p">],</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;truncation&quot;</span><span class="p">],</span>
+            <span class="n">loc</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">],</span>
+            <span class="n">scale</span><span class="o">=</span><span class="n">params</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">],</span>
+            <span class="n">size</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sample_fluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gmm</span><span class="p">,</span> <span class="n">flux_params</span><span class="p">):</span>
+        <span class="n">flux_prop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_flux_ratios</span><span class="p">(</span><span class="n">gmm</span><span class="p">)</span>
+        <span class="n">latent_dims</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">ref_band_flux</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_draw_truncated_pareto</span><span class="p">(</span><span class="n">flux_params</span><span class="p">,</span> <span class="n">latent_dims</span><span class="p">)</span>
+        <span class="n">total_flux</span> <span class="o">=</span> <span class="n">ref_band_flux</span> <span class="o">*</span> <span class="n">flux_prop</span>
+
+        <span class="c1"># select specified bands</span>
+        <span class="n">bands</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">total_flux</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">bands</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_color_models</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Load models from disk</span>
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">star_color_model_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">gmm_star</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gal_color_model_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">gmm_gal</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gmm_star</span><span class="p">,</span> <span class="n">gmm_gal</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sample_flux_ratios</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gmm</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample and compute all star, galaxy fluxes based on real image data.</span>
+
+<span class="sd">        Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,</span>
+<span class="sd">        using prior `b`-band star/galaxy flux parameters, then apply other-band-to-`b`-band flux</span>
+<span class="sd">        ratios to get other-band flux values. This is primarily because it is not always the case</span>
+<span class="sd">        that, e.g.,</span>
+<span class="sd">            flux_r ~ Pareto, flux_g ~ Pareto =&gt; flux_r | flux_g ~ Pareto.</span>
+<span class="sd">        This function is survey-specific as the &#39;b&#39;-band index depends on the survey.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            gmm: Gaussian mixture model of flux ratios (either star or galaxy)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            stars_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all star flux</span>
+<span class="sd">                ratios for current batch</span>
+<span class="sd">            gals_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all gal fluxes</span>
+<span class="sd">                ratios for current batch</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sample_dims</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">)</span>
+        <span class="n">flux_logdiff</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">gmm</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">sample_dims</span><span class="p">))</span>
+
+        <span class="c1"># A log difference of +/- 2.76 correpsonds to a 3 magnitude difference (e.g. 18 vs 21),</span>
+        <span class="c1"># or equivalently an 15.8x flux ratio.</span>
+        <span class="c1"># It&#39;s unlikely that objects will have a ratio larger than this.</span>
+        <span class="n">flux_logdiff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">flux_logdiff</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.76</span><span class="p">,</span> <span class="mf">2.76</span><span class="p">)</span>
+        <span class="n">flux_ratio</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">flux_logdiff</span><span class="p">)</span>
+
+        <span class="c1"># Computes the flux in each band as a proportion of the reference band flux</span>
+        <span class="n">flux_prop</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">flux_logdiff</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">flux_prop</span><span class="p">[:,</span> <span class="n">band</span><span class="p">]</span> <span class="o">=</span> <span class="n">flux_prop</span><span class="p">[:,</span> <span class="n">band</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">flux_ratio</span><span class="p">[:,</span> <span class="n">band</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_band</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">):</span>
+            <span class="n">flux_prop</span><span class="p">[:,</span> <span class="n">band</span><span class="p">]</span> <span class="o">=</span> <span class="n">flux_prop</span><span class="p">[:,</span> <span class="n">band</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">flux_ratio</span><span class="p">[:,</span> <span class="n">band</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+        <span class="c1"># Reshape drawn values into appropriate form</span>
+        <span class="n">sample_dims</span> <span class="o">=</span> <span class="n">sample_dims</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,)</span>
+        <span class="k">return</span> <span class="n">flux_prop</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">sample_dims</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sample_galaxy_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample the latent galaxy params.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.</span>
+<span class="sd">                - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)</span>
+<span class="sd">                - beta_radians: the angle of shear in radians</span>
+<span class="sd">                - disk_q: the minor-to-major axis ratio of the disk</span>
+<span class="sd">                - a_d: semi-major axis of disk</span>
+<span class="sd">                - bulge_q: minor-to-major axis ratio of the bulge</span>
+<span class="sd">                - a_b: semi-major axis of bulge</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">latent_dims</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">disk_frac</span> <span class="o">=</span> <span class="n">Uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span>
+        <span class="n">beta_radians</span> <span class="o">=</span> <span class="n">Uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span>
+        <span class="n">disk_q</span> <span class="o">=</span> <span class="n">Uniform</span><span class="p">(</span><span class="mf">1e-8</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span>
+        <span class="n">bulge_q</span> <span class="o">=</span> <span class="n">Uniform</span><span class="p">(</span><span class="mf">1e-8</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span>
+
+        <span class="n">base_dist</span> <span class="o">=</span> <span class="n">Gamma</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_concentration</span><span class="p">,</span> <span class="n">rate</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="n">disk_a</span> <span class="o">=</span> <span class="n">base_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_scale</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_loc</span>
+
+        <span class="n">bulge_loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_loc</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_bd_ratio</span>
+        <span class="n">bulge_scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_scale</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_a_bd_ratio</span>
+        <span class="n">bulge_a</span> <span class="o">=</span> <span class="n">base_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">latent_dims</span><span class="p">)</span> <span class="o">*</span> <span class="n">bulge_scale</span> <span class="o">+</span> <span class="n">bulge_loc</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;galaxy_disk_frac&quot;</span><span class="p">:</span> <span class="n">disk_frac</span><span class="p">,</span>
+            <span class="s2">&quot;galaxy_beta_radians&quot;</span><span class="p">:</span> <span class="n">beta_radians</span><span class="p">,</span>
+            <span class="s2">&quot;galaxy_disk_q&quot;</span><span class="p">:</span> <span class="n">disk_q</span><span class="p">,</span>
+            <span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">:</span> <span class="n">disk_a</span><span class="p">,</span>
+            <span class="s2">&quot;galaxy_bulge_q&quot;</span><span class="p">:</span> <span class="n">bulge_q</span><span class="p">,</span>
+            <span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">:</span> <span class="n">bulge_a</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

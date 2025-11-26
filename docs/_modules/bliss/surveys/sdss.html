@@ -1,0 +1,665 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss.surveys.sdss &mdash; bliss  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bliss.surveys.sdss</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bliss.surveys.sdss</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">bz2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gzip</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">TypedDict</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">fits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">download_file</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.wcs</span><span class="w"> </span><span class="kn">import</span> <span class="n">WCS</span><span class="p">,</span> <span class="n">FITSFixedWarning</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">einops</span><span class="w"> </span><span class="kn">import</span> <span class="n">rearrange</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.interpolate</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegularGridInterpolator</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">FullCatalog</span><span class="p">,</span> <span class="n">SourceType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.simulator.psf</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImagePSF</span><span class="p">,</span> <span class="n">PSFConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.surveys.download_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">download_file_to_dst</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.surveys.survey</span><span class="w"> </span><span class="kn">import</span> <span class="n">Survey</span>
+
+<span class="n">SDSSFields</span> <span class="o">=</span> <span class="n">List</span><span class="p">[</span><span class="n">TypedDict</span><span class="p">(</span><span class="s2">&quot;SDSSField&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;run&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;camcol&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]})]</span>
+
+
+<div class="viewcode-block" id="SloanDigitalSkySurvey">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SloanDigitalSkySurvey">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SloanDigitalSkySurvey</span><span class="p">(</span><span class="n">Survey</span><span class="p">):</span>
+    <span class="n">BANDS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SloanDigitalSkySurvey.radec_for_rcf">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SloanDigitalSkySurvey.radec_for_rcf">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">radec_for_rcf</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get center (RA, DEC) for a given run, camcol, field.&quot;&quot;&quot;</span>
+        <span class="n">extents</span> <span class="o">=</span> <span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">field_extents</span><span class="p">()</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="n">extents</span><span class="p">[</span>
+            <span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">run</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="s2">&quot;camcol&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">camcol</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="s2">&quot;field&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">field</span><span class="p">)</span>
+        <span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">ra_center</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;ramin&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;ramax&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;ramin&quot;</span><span class="p">])</span> <span class="o">/</span> <span class="mi">2</span>
+        <span class="n">dec_center</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;decmin&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;decmax&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;decmin&quot;</span><span class="p">])</span> <span class="o">/</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">ra_center</span><span class="p">,</span> <span class="n">dec_center</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SloanDigitalSkySurvey.rcf_for_radec">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SloanDigitalSkySurvey.rcf_for_radec">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rcf_for_radec</span><span class="p">(</span><span class="n">ra</span><span class="p">,</span> <span class="n">dec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get run, camcol, field for a given RA, DEC.&quot;&quot;&quot;</span>
+        <span class="n">extents</span> <span class="o">=</span> <span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">field_extents</span><span class="p">()</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="n">extents</span><span class="p">[</span>
+            <span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="s2">&quot;ramin&quot;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">ra</span><span class="p">)</span>
+            <span class="o">&amp;</span> <span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="s2">&quot;ramax&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">ra</span><span class="p">)</span>
+            <span class="o">&amp;</span> <span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="s2">&quot;decmin&quot;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">dec</span><span class="p">)</span>
+            <span class="o">&amp;</span> <span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="s2">&quot;decmax&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">dec</span><span class="p">)</span>
+        <span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;camcol&quot;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;field&quot;</span><span class="p">])</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">psf_config</span><span class="p">:</span> <span class="n">PSFConfig</span><span class="p">,</span>
+        <span class="n">fields</span><span class="p">,</span>
+        <span class="n">dir_path</span><span class="o">=</span><span class="s2">&quot;data/sdss&quot;</span><span class="p">,</span>
+        <span class="n">load_image_data</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">background_offset</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">align_to_band</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">crop_to_bands</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">crop_to_hw</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">sdss_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">dir_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sdss_fields</span> <span class="o">=</span> <span class="n">fields</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_image_data</span> <span class="o">=</span> <span class="n">load_image_data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">background_offset</span> <span class="o">=</span> <span class="n">background_offset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">align_to_band</span> <span class="o">=</span> <span class="n">align_to_band</span>
+
+        <span class="n">num_frames</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">rcf_conf</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">rcf_conf</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">items</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_frames</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloader</span> <span class="o">=</span> <span class="n">SDSSDownloader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_ids</span><span class="p">(),</span> <span class="n">download_dir</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sdss_path</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">psf</span> <span class="o">=</span> <span class="n">SDSS_PSF</span><span class="p">(</span><span class="n">dir_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_ids</span><span class="p">(),</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">BANDS</span><span class="p">)),</span> <span class="n">psf_config</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">crop_to_bands</span> <span class="o">=</span> <span class="n">crop_to_bands</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">crop_to_hw</span> <span class="o">=</span> <span class="n">crop_to_hw</span>
+
+<div class="viewcode-block" id="SloanDigitalSkySurvey.prepare_data">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SloanDigitalSkySurvey.prepare_data">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prepare_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloader</span><span class="o">.</span><span class="n">download_pfs</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">rcf_conf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdss_fields</span><span class="p">:</span>
+            <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">fields</span> <span class="o">=</span> <span class="n">rcf_conf</span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">],</span> <span class="n">rcf_conf</span><span class="p">[</span><span class="s2">&quot;camcol&quot;</span><span class="p">],</span> <span class="n">rcf_conf</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">]</span>
+
+            <span class="n">pf_file</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;photoField-</span><span class="si">{</span><span class="n">run</span><span class="si">:</span><span class="s2">06d</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2">.fits&quot;</span>
+            <span class="n">pf_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdss_path</span> <span class="o">/</span> <span class="nb">str</span><span class="p">(</span><span class="n">run</span><span class="p">)</span> <span class="o">/</span> <span class="nb">str</span><span class="p">(</span><span class="n">camcol</span><span class="p">)</span> <span class="o">/</span> <span class="n">pf_file</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pf_path</span><span class="si">}</span><span class="s2"> does not exist. &quot;</span>
+                <span class="o">+</span> <span class="s2">&quot;Make sure data files are available for specified (run, camcol).&quot;</span>
+            <span class="p">)</span>
+            <span class="k">assert</span> <span class="n">Path</span><span class="p">(</span><span class="n">pf_path</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="n">msg</span>
+            <span class="n">pf_fits</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getdata</span><span class="p">(</span><span class="n">pf_path</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">pf_fits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Could not load fits file </span><span class="si">{</span><span class="n">pf_path</span><span class="si">}</span><span class="s2">.&quot;</span>
+
+            <span class="n">fieldnums</span> <span class="o">=</span> <span class="n">pf_fits</span><span class="p">[</span><span class="s2">&quot;FIELD&quot;</span><span class="p">]</span>
+            <span class="n">fieldgains</span> <span class="o">=</span> <span class="n">pf_fits</span><span class="p">[</span><span class="s2">&quot;GAIN&quot;</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">fields</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+                    <span class="n">gain</span> <span class="o">=</span> <span class="n">fieldgains</span><span class="p">[</span><span class="n">fieldnums</span> <span class="o">==</span> <span class="n">field</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">gain</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">gain</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">fieldnums</span><span class="p">,</span> <span class="n">fieldgains</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">gain</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">downloader</span><span class="o">.</span><span class="n">download_images</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span><span class="p">:</span>
+            <span class="n">field_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdss_path</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">bl</span> <span class="ow">in</span> <span class="n">SloanDigitalSkySurvey</span><span class="o">.</span><span class="n">BANDS</span><span class="p">:</span>
+                <span class="n">frame_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;frame-</span><span class="si">{</span><span class="n">bl</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">run</span><span class="si">:</span><span class="s2">06d</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">field</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.fits&quot;</span>
+                <span class="n">frame_path</span> <span class="o">=</span> <span class="n">field_path</span> <span class="o">/</span> <span class="n">frame_name</span>
+                <span class="k">assert</span> <span class="n">Path</span><span class="p">(</span><span class="n">frame_path</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">frame_path</span><span class="si">}</span><span class="s2"> does not exist.&quot;</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_from_disk</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_from_disk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+        <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">gain</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+        <span class="n">camcol_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdss_path</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">run</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">camcol</span><span class="p">))</span>
+        <span class="n">field_dir</span> <span class="o">=</span> <span class="n">camcol_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">field</span><span class="p">))</span>
+        <span class="n">frame_list</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">item</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="n">field</span><span class="p">,</span>
+            <span class="s2">&quot;psf_params&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">psf_params</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">image_id</span><span class="p">(</span><span class="n">idx</span><span class="p">)],</span>
+            <span class="s2">&quot;psf_galsim&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">psf_galsim</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">image_id</span><span class="p">(</span><span class="n">idx</span><span class="p">)],</span>
+        <span class="p">}</span>
+
+        <span class="k">for</span> <span class="n">b</span><span class="p">,</span> <span class="n">bl</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">BANDS</span><span class="p">):</span>
+            <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_frame_for_band</span><span class="p">(</span><span class="n">bl</span><span class="p">,</span> <span class="n">field_dir</span><span class="p">,</span> <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">gain</span><span class="p">[</span><span class="n">b</span><span class="p">])</span>
+            <span class="n">frame_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">frame_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">band_data</span> <span class="o">=</span> <span class="p">[</span><span class="n">frame</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="n">frame_list</span><span class="p">]</span>
+            <span class="n">item</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">band_data</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">band_data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="k">else</span> <span class="n">band_data</span>
+
+        <span class="c1"># a hack to deal with underestimated backgrounds</span>
+        <span class="n">item</span><span class="p">[</span><span class="s2">&quot;background&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">background_offset</span>
+
+        <span class="k">return</span> <span class="n">item</span>
+
+<div class="viewcode-block" id="SloanDigitalSkySurvey.image_id">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SloanDigitalSkySurvey.image_id">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">image_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the image_id for the given index.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span><span class="p">[</span><span class="n">idx</span><span class="p">][:</span><span class="mi">3</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SloanDigitalSkySurvey.idx">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SloanDigitalSkySurvey.idx">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">idx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_id</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the index for the given image_id.&quot;&quot;&quot;</span>
+        <span class="n">r</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="n">image_id</span>
+        <span class="c1"># Return first index that matches r, c, f</span>
+        <span class="k">return</span> <span class="nb">next</span><span class="p">(</span>
+            <span class="n">i</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rcfgcs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SloanDigitalSkySurvey.image_ids">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SloanDigitalSkySurvey.image_ids">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">image_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return all image_ids.</span>
+
+<span class="sd">        Note: Parallel to `rcfgcs`.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List[Tuple[int, int, int]]: List of (run, camcol, field) image_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rcfs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">rcf_conf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdss_fields</span><span class="p">:</span>
+            <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">fields</span> <span class="o">=</span> <span class="n">rcf_conf</span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">],</span> <span class="n">rcf_conf</span><span class="p">[</span><span class="s2">&quot;camcol&quot;</span><span class="p">],</span> <span class="n">rcf_conf</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+                <span class="n">rcfs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">rcfs</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_frame_for_band</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bl</span><span class="p">,</span> <span class="n">field_dir</span><span class="p">,</span> <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">gain</span><span class="p">):</span>
+        <span class="n">frame_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;frame-</span><span class="si">{</span><span class="n">bl</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">run</span><span class="si">:</span><span class="s2">06d</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">field</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.fits&quot;</span>
+        <span class="n">frame_path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">field_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="n">frame_name</span><span class="p">))</span>
+        <span class="n">calibration</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getdata</span><span class="p">(</span><span class="n">frame_path</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">nelec_per_nmgy</span> <span class="o">=</span> <span class="n">gain</span> <span class="o">/</span> <span class="n">calibration</span>
+
+        <span class="n">sky_data</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getdata</span><span class="p">(</span><span class="n">frame_path</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">sky_small</span> <span class="o">=</span> <span class="n">sky_data</span><span class="p">[</span><span class="s2">&quot;ALLSKY&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">sky_x</span> <span class="o">=</span> <span class="n">sky_data</span><span class="p">[</span><span class="s2">&quot;XINTERP&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">sky_y</span> <span class="o">=</span> <span class="n">sky_data</span><span class="p">[</span><span class="s2">&quot;YINTERP&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">small_rows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="mi">0</span> <span class="p">:</span> <span class="n">sky_small</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="n">small_cols</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="mi">0</span> <span class="p">:</span> <span class="n">sky_small</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="n">small_rcs</span> <span class="o">=</span> <span class="p">(</span><span class="n">small_rows</span><span class="p">,</span> <span class="n">small_cols</span><span class="p">)</span>
+        <span class="n">sky_interp</span> <span class="o">=</span> <span class="n">RegularGridInterpolator</span><span class="p">(</span><span class="n">small_rcs</span><span class="p">,</span> <span class="n">sky_small</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;nearest&quot;</span><span class="p">)</span>
+
+        <span class="n">sky_y</span> <span class="o">=</span> <span class="n">sky_y</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sky_small</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">sky_x</span> <span class="o">=</span> <span class="n">sky_x</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sky_small</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">large_points</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">sky_y</span><span class="p">,</span> <span class="n">sky_x</span><span class="p">),</span> <span class="s2">&quot;n x y -&gt; y x n&quot;</span><span class="p">)</span>
+        <span class="n">large_sky</span> <span class="o">=</span> <span class="n">sky_interp</span><span class="p">(</span><span class="n">large_points</span><span class="p">)</span>
+        <span class="n">large_sky_nelec</span> <span class="o">=</span> <span class="n">large_sky</span> <span class="o">*</span> <span class="n">gain</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_image_data</span><span class="p">:</span>
+            <span class="n">pixels_ss_nmgy</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getdata</span><span class="p">(</span><span class="n">frame_path</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">pixels_ss_nelec</span> <span class="o">=</span> <span class="n">pixels_ss_nmgy</span> <span class="o">*</span> <span class="n">nelec_per_nmgy</span>
+            <span class="n">pixels_nelec</span> <span class="o">=</span> <span class="n">pixels_ss_nelec</span> <span class="o">+</span> <span class="n">large_sky_nelec</span>
+
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="n">FITSFixedWarning</span><span class="p">)</span>
+            <span class="n">wcs</span> <span class="o">=</span> <span class="n">WCS</span><span class="p">(</span><span class="n">fits</span><span class="o">.</span><span class="n">getheader</span><span class="p">(</span><span class="n">frame_path</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;background&quot;</span><span class="p">:</span> <span class="n">large_sky_nelec</span><span class="p">,</span>
+            <span class="s2">&quot;gain&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">gain</span><span class="p">),</span>
+            <span class="s2">&quot;flux_calibration&quot;</span><span class="p">:</span> <span class="n">nelec_per_nmgy</span><span class="p">,</span>
+            <span class="s2">&quot;wcs&quot;</span><span class="p">:</span> <span class="n">wcs</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_image_data</span><span class="p">:</span>
+            <span class="n">d</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pixels_nelec</span>
+
+        <span class="k">return</span> <span class="n">d</span></div>
+
+
+
+<div class="viewcode-block" id="SDSSDownloader">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SDSSDownloader">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SDSSDownloader</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Class for downloading SDSS data.&quot;&quot;&quot;</span>
+
+    <span class="n">URLBASE</span> <span class="o">=</span> <span class="s2">&quot;https://data.sdss.org/sas/dr12/boss&quot;</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stripped</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">val</span><span class="p">)</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">run</span><span class="p">))</span><span class="si">:</span><span class="s2">06d</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">field</span><span class="p">))</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">subdir2</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">subdir3</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">subdir2</span><span class="p">(</span><span class="n">run</span><span class="p">,</span><span class="w"> </span><span class="n">camcol</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ids</span><span class="p">,</span> <span class="n">download_dir</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_ids</span> <span class="o">=</span> <span class="n">image_ids</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span> <span class="o">=</span> <span class="n">download_dir</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_field_extents</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="c1"># Download and use field-extents in memory</span>
+        <span class="n">field_extents_filename</span> <span class="o">=</span> <span class="n">download_file</span><span class="p">(</span>
+            <span class="s2">&quot;https://portal.nersc.gov/project/dasrepo/celeste/field_extents.fits&quot;</span><span class="p">,</span>
+            <span class="n">cache</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">_field_extents</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">field_extents_filename</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SDSSDownloader.field_extents">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.SDSSDownloader.field_extents">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">field_extents</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Table</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get field extents table.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="s2">&quot;_field_extents&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">download_field_extents</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_field_extents</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_pfs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">image_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_ids</span><span class="p">:</span>
+            <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">image_id</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download_pf</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_pf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">):</span>
+        <span class="n">download_file_to_dst</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">URLBASE</span><span class="si">}</span><span class="s2">/photoObj/301/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;photoField-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">subdir2</span><span class="p">(</span><span class="n">run</span><span class="p">,</span><span class="w"> </span><span class="n">camcol</span><span class="p">)</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;photoField-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_catalogs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">image_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_ids</span><span class="p">:</span>
+            <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span> <span class="o">=</span> <span class="n">image_id</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download_catalog</span><span class="p">((</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_catalog</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rcf</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span> <span class="o">=</span> <span class="n">rcf</span>
+        <span class="n">cat_path</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">subdir3</span><span class="p">(</span><span class="n">run</span><span class="p">,</span><span class="w"> </span><span class="n">camcol</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;photoObj-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span>
+        <span class="p">)</span>
+        <span class="n">download_file_to_dst</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">URLBASE</span><span class="si">}</span><span class="s2">/photoObj/301/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;photoObj-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+            <span class="n">cat_path</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cat_path</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_images</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">image_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_ids</span><span class="p">:</span>
+            <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span> <span class="o">=</span> <span class="n">image_id</span>
+            <span class="k">for</span> <span class="n">bl</span> <span class="ow">in</span> <span class="n">SloanDigitalSkySurvey</span><span class="o">.</span><span class="n">BANDS</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">download_image</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">bl</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">band</span><span class="o">=</span><span class="s2">&quot;r&quot;</span><span class="p">):</span>
+        <span class="n">download_file_to_dst</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">URLBASE</span><span class="si">}</span><span class="s2">/photo/redux/301/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">/objcs/</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;fpM-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="si">}{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fit.gz&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">subdir3</span><span class="p">(</span><span class="n">run</span><span class="p">,</span><span class="w"> </span><span class="n">camcol</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;fpM-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="si">}{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+            <span class="n">gzip</span><span class="o">.</span><span class="n">decompress</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">download_file_to_dst</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">URLBASE</span><span class="si">}</span><span class="s2">/photoObj/frames/301/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;frame-</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits.bz2&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">subdir3</span><span class="p">(</span><span class="n">run</span><span class="p">,</span><span class="w"> </span><span class="n">camcol</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;frame-</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+            <span class="n">bz2</span><span class="o">.</span><span class="n">decompress</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_psfields</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">image_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_ids</span><span class="p">:</span>
+            <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span> <span class="o">=</span> <span class="n">image_id</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download_psfield</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_psfield</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">):</span>
+        <span class="n">download_file_to_dst</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SDSSDownloader</span><span class="o">.</span><span class="n">URLBASE</span><span class="si">}</span><span class="s2">/photo/redux/301/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stripped</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">/objcs/</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;psField-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fit&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">subdir3</span><span class="p">(</span><span class="n">run</span><span class="p">,</span><span class="w"> </span><span class="n">camcol</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;psField-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">run6</span><span class="p">(</span><span class="n">run</span><span class="p">)</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">field4</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">download_all</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download_dir</span><span class="p">)</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_pfs</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_catalogs</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_images</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download_psfields</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="PhotoFullCatalog">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.PhotoFullCatalog">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PhotoFullCatalog</span><span class="p">(</span><span class="n">FullCatalog</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Class for the SDSS PHOTO Catalog.</span>
+
+<span class="sd">    Some resources:</span>
+<span class="sd">    - https://www.sdss.org/dr12/algorithms/classify/</span>
+<span class="sd">    - https://www.sdss.org/dr12/algorithms/resolve/</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="PhotoFullCatalog.from_file">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.PhotoFullCatalog.from_file">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_file</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">cat_path</span><span class="p">,</span> <span class="n">wcs</span><span class="p">:</span> <span class="n">WCS</span><span class="p">,</span> <span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Instantiates PhotoFullCatalog with RCF and WCS information from disk.&quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">Path</span><span class="p">(</span><span class="n">cat_path</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;File </span><span class="si">{</span><span class="n">cat_path</span><span class="si">}</span><span class="s2"> does not exist&quot;</span>
+
+        <span class="n">table</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getdata</span><span class="p">(</span><span class="n">cat_path</span><span class="p">)</span>
+
+        <span class="c1"># Convert table entries to tensors</span>
+        <span class="n">objc_type</span> <span class="o">=</span> <span class="n">column_to_tensor</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="s2">&quot;objc_type&quot;</span><span class="p">)</span>
+        <span class="n">thing_id</span> <span class="o">=</span> <span class="n">column_to_tensor</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="s2">&quot;thing_id&quot;</span><span class="p">)</span>
+        <span class="n">ras</span> <span class="o">=</span> <span class="n">column_to_tensor</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="s2">&quot;ra&quot;</span><span class="p">)</span>
+        <span class="n">decs</span> <span class="o">=</span> <span class="n">column_to_tensor</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="s2">&quot;dec&quot;</span><span class="p">)</span>
+        <span class="n">galaxy_bools</span> <span class="o">=</span> <span class="p">(</span><span class="n">objc_type</span> <span class="o">==</span> <span class="mi">3</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">thing_id</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">star_bools</span> <span class="o">=</span> <span class="p">(</span><span class="n">objc_type</span> <span class="o">==</span> <span class="mi">6</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">thing_id</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Combine light source parameters to one tensor</span>
+        <span class="n">star_fluxes</span> <span class="o">=</span> <span class="n">column_to_tensor</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="s2">&quot;psfflux&quot;</span><span class="p">)</span> <span class="o">*</span> <span class="n">star_bools</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">galaxy_fluxes</span> <span class="o">=</span> <span class="n">column_to_tensor</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="s2">&quot;cmodelflux&quot;</span><span class="p">)</span> <span class="o">*</span> <span class="n">galaxy_bools</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">fluxes</span> <span class="o">=</span> <span class="n">star_fluxes</span> <span class="o">+</span> <span class="n">galaxy_fluxes</span>
+
+        <span class="c1"># true light source mask</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">galaxy_bools</span> <span class="o">|</span> <span class="n">star_bools</span>
+
+        <span class="n">galaxy_bools</span> <span class="o">=</span> <span class="n">galaxy_bools</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+        <span class="n">star_bools</span> <span class="o">=</span> <span class="n">star_bools</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+        <span class="n">ras</span> <span class="o">=</span> <span class="n">ras</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+        <span class="n">decs</span> <span class="o">=</span> <span class="n">decs</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+        <span class="n">fluxes</span> <span class="o">=</span> <span class="n">fluxes</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+        <span class="n">nobj</span> <span class="o">=</span> <span class="n">ras</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># We require all 5 bands for computing loss on predictions.</span>
+        <span class="n">n_bands</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">SloanDigitalSkySurvey</span><span class="o">.</span><span class="n">BANDS</span><span class="p">)</span>
+
+        <span class="c1"># get pixel coordinates</span>
+        <span class="n">plocs</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">plocs_from_ra_dec</span><span class="p">(</span><span class="n">ras</span><span class="p">,</span> <span class="n">decs</span><span class="p">,</span> <span class="n">wcs</span><span class="p">)</span>
+
+        <span class="c1"># Verify each tile contains either a star or a galaxy</span>
+        <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">star_bools</span> <span class="o">+</span> <span class="n">galaxy_bools</span><span class="p">)</span>
+        <span class="n">source_type</span> <span class="o">=</span> <span class="n">SourceType</span><span class="o">.</span><span class="n">STAR</span> <span class="o">*</span> <span class="n">star_bools</span> <span class="o">+</span> <span class="n">SourceType</span><span class="o">.</span><span class="n">GALAXY</span> <span class="o">*</span> <span class="n">galaxy_bools</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;plocs&quot;</span><span class="p">:</span> <span class="n">plocs</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">nobj</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+            <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">((</span><span class="n">nobj</span><span class="p">,)),</span>
+            <span class="s2">&quot;source_type&quot;</span><span class="p">:</span> <span class="n">source_type</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">nobj</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="s2">&quot;fluxes&quot;</span><span class="p">:</span> <span class="n">fluxes</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">nobj</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">),</span>
+            <span class="s2">&quot;ra&quot;</span><span class="p">:</span> <span class="n">ras</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">nobj</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="s2">&quot;dec&quot;</span><span class="p">:</span> <span class="n">decs</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">nobj</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="PhotoFullCatalog.restrict_by_ra_dec">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.surveys.sdss.PhotoFullCatalog.restrict_by_ra_dec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restrict_by_ra_dec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ra_lim</span><span class="p">,</span> <span class="n">dec_lim</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Helper function to restrict photo catalog to within RA and DEC limits.&quot;&quot;&quot;</span>
+        <span class="n">ra</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;ra&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+        <span class="n">dec</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;dec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+
+        <span class="n">keep</span> <span class="o">=</span> <span class="p">(</span><span class="n">ra</span> <span class="o">&gt;</span> <span class="n">ra_lim</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">ra</span> <span class="o">&lt;</span> <span class="n">ra_lim</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">dec</span> <span class="o">&gt;=</span> <span class="n">dec_lim</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">dec</span> <span class="o">&lt;=</span> <span class="n">dec_lim</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">plocs</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">][:,</span> <span class="n">keep</span><span class="p">]</span>
+        <span class="n">n_sources</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">plocs</span><span class="o">.</span><span class="n">size</span><span class="p">()[</span><span class="mi">1</span><span class="p">]])</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="n">n_sources</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">[:,</span> <span class="n">keep</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">PhotoFullCatalog</span><span class="p">(</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">plocs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">plocs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span>  <span class="c1"># new height</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">plocs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">plocs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span>  <span class="c1"># new width</span>
+            <span class="n">d</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SDSS_PSF</span><span class="p">(</span><span class="n">ImagePSF</span><span class="p">):</span>  <span class="c1"># noqa: N801</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_fit_file_psf_params</span><span class="p">(</span><span class="n">psf_fit_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">bands</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load psf parameters from fits file.</span>
+
+<span class="sd">        See https://data.sdss.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html</span>
+<span class="sd">        for details on the parameters.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            psf_fit_file (str): file to load from</span>
+<span class="sd">            bands (Tuple[int, ...]): SDSS bands to load</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            psf_params: tensor of parameters for each band</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">psf_fit_file</span><span class="si">}</span><span class="s2"> does not exist. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Make sure data files are available for fields specified in config.&quot;</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">Path</span><span class="p">(</span><span class="n">psf_fit_file</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="n">msg</span>
+        <span class="c1"># HDU 6 contains the PSF header (after primary and eigenimages)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">psf_fit_file</span><span class="p">,</span> <span class="n">ignore_missing_end</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">psf_params</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bands</span><span class="p">),</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">band</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bands</span><span class="p">):</span>
+            <span class="n">sigma1</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;psf_sigma1&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="n">band</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span>
+            <span class="n">sigma2</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;psf_sigma2&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="n">band</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span>
+            <span class="n">sigmap</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;psf_sigmap&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="n">band</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span>
+            <span class="n">beta</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;psf_beta&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="n">band</span><span class="p">]</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;psf_b&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="n">band</span><span class="p">]</span>
+            <span class="n">p0</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;psf_p0&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="n">band</span><span class="p">]</span>
+
+            <span class="n">psf_params</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">sigma1</span><span class="p">,</span> <span class="n">sigma2</span><span class="p">,</span> <span class="n">sigmap</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">p0</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">psf_params</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">survey_data_dir</span><span class="p">,</span> <span class="n">image_ids</span><span class="p">,</span> <span class="n">bands</span><span class="p">,</span> <span class="n">psf_config</span><span class="p">:</span> <span class="n">PSFConfig</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">bands</span><span class="p">,</span> <span class="o">**</span><span class="n">psf_config</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">psf_galsim</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">psf_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">SDSSDownloader</span><span class="p">(</span><span class="n">image_ids</span><span class="p">,</span> <span class="n">download_dir</span><span class="o">=</span><span class="n">survey_data_dir</span><span class="p">)</span><span class="o">.</span><span class="n">download_psfields</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">image_ids</span><span class="p">:</span>
+            <span class="c1"># load raw params from file</span>
+            <span class="n">field_dir</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">survey_data_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field_dir</span><span class="si">}</span><span class="s2">/psField-</span><span class="si">{</span><span class="n">run</span><span class="si">:</span><span class="s2">06</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">camcol</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">field</span><span class="si">:</span><span class="s2">04</span><span class="si">}</span><span class="s2">.fits&quot;</span>
+            <span class="k">assert</span> <span class="n">Path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;psField file </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2"> not found&quot;</span>
+            <span class="n">psf_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_fit_file_psf_params</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">bands</span><span class="p">)</span>
+
+            <span class="c1"># load psf image from params</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">psf_params</span><span class="p">[(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">)]</span> <span class="o">=</span> <span class="n">psf_params</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">psf_galsim</span><span class="p">[(</span><span class="n">run</span><span class="p">,</span> <span class="n">camcol</span><span class="p">,</span> <span class="n">field</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_psf</span><span class="p">(</span><span class="n">psf_params</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_psf_fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">sigma1</span><span class="p">,</span> <span class="n">sigma2</span><span class="p">,</span> <span class="n">sigmap</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">p0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate the PSF from the parameters using the power-law model.</span>
+
+<span class="sd">        See https://data.sdss.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html</span>
+<span class="sd">        for details on the parameters and the equation used.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            r: radius</span>
+<span class="sd">            sigma1: Inner gaussian sigma for the composite fit</span>
+<span class="sd">            sigma2: Outer gaussian sigma for the composite fit</span>
+<span class="sd">            sigmap: Width parameter for power law (pixels)</span>
+<span class="sd">            beta: Slope of power law.</span>
+<span class="sd">            b: Ratio of the outer PSF to the inner PSF at the origin</span>
+<span class="sd">            p0: The value of the power law at the origin.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The psf function evaluated at r.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">term1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">r</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">sigma1</span><span class="p">))</span>
+        <span class="n">term2</span> <span class="o">=</span> <span class="n">b</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">r</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">sigma2</span><span class="p">))</span>
+        <span class="n">term3</span> <span class="o">=</span> <span class="n">p0</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">r</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="n">beta</span> <span class="o">*</span> <span class="n">sigmap</span><span class="p">))</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="n">beta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">term1</span> <span class="o">+</span> <span class="n">term2</span> <span class="o">+</span> <span class="n">term3</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">b</span> <span class="o">+</span> <span class="n">p0</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">nelec_to_nmgy_for_catalog</span><span class="p">(</span><span class="n">est_cat</span><span class="p">,</span> <span class="n">nelec_per_nmgy_per_band</span><span class="p">):</span>
+    <span class="n">fluxes_suffix</span> <span class="o">=</span> <span class="s2">&quot;_fluxes&quot;</span>
+    <span class="c1"># reshape nelec_per_nmgy_per_band to (1, 1, 1, 1, {n_bands}) to broadcast</span>
+    <span class="n">nelec_per_nmgy_per_band</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">nelec_per_nmgy_per_band</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">est_cat</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">nelec_per_nmgy_per_band</span> <span class="o">=</span> <span class="n">nelec_per_nmgy_per_band</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">est_cat</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">fluxes_suffix</span><span class="p">):</span>
+            <span class="n">est_cat</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">est_cat</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">/</span> <span class="n">nelec_per_nmgy_per_band</span>
+    <span class="k">return</span> <span class="n">est_cat</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">column_to_tensor</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">colname</span><span class="p">):</span>
+    <span class="n">dtypes</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;i2&quot;</span><span class="p">):</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;i4&quot;</span><span class="p">):</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;i8&quot;</span><span class="p">):</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;bool&quot;</span><span class="p">):</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;f4&quot;</span><span class="p">):</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;&gt;f8&quot;</span><span class="p">):</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;float32&quot;</span><span class="p">):</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">):</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="n">colname</span><span class="p">])</span>
+    <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtypes</span><span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

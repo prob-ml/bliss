@@ -1,0 +1,366 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss.simulator.decoder &mdash; bliss  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bliss.simulator.decoder</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bliss.simulator.decoder</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">galsim</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.wcs</span><span class="w"> </span><span class="kn">import</span> <span class="n">WCS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">einops</span><span class="w"> </span><span class="kn">import</span> <span class="n">rearrange</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.align</span><span class="w"> </span><span class="kn">import</span> <span class="n">align</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">SourceType</span><span class="p">,</span> <span class="n">TileCatalog</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bliss.surveys.survey</span><span class="w"> </span><span class="kn">import</span> <span class="n">Survey</span>
+
+
+<div class="viewcode-block" id="Decoder">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.decoder.Decoder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Decoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">survey</span><span class="p">:</span> <span class="n">Survey</span><span class="p">,</span>
+        <span class="n">use_survey_background</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">with_dither</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">with_noise</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a decoder for a set of images.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tile_slen: side length in pixels of a tile</span>
+<span class="sd">            survey: survey to mimic (psf, background, calibration, etc.)</span>
+<span class="sd">            use_survey_background: if True, add randomly sampled survey background to the images</span>
+<span class="sd">            with_dither: if True, apply random pixel shifts to the images and align them</span>
+<span class="sd">            with_noise: if True, add Poisson noise to the image pixels</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">survey</span> <span class="o">=</span> <span class="n">survey</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_survey_background</span> <span class="o">=</span> <span class="n">use_survey_background</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">with_dither</span> <span class="o">=</span> <span class="n">with_dither</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">with_noise</span> <span class="o">=</span> <span class="n">with_noise</span>
+
+        <span class="n">survey</span><span class="o">.</span><span class="n">prepare_data</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Decoder.render_star">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.decoder.Decoder.render_star">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">render_star</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">psf</span><span class="p">,</span> <span class="n">band</span><span class="p">,</span> <span class="n">source_params</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render a star with given params and PSF.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            source_params (Tensor): Tensor containing the parameters for a particular source</span>
+<span class="sd">                (see prior.py for details about these parameters)</span>
+<span class="sd">            psf (List): a list of PSFs for each band</span>
+<span class="sd">            band (int): band</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            GSObject: a galsim representation of the rendered star convolved with the PSF</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">psf</span><span class="p">[</span><span class="n">band</span><span class="p">]</span><span class="o">.</span><span class="n">withFlux</span><span class="p">(</span><span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">][</span><span class="n">band</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="Decoder.render_bulge_plus_disk">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.decoder.Decoder.render_bulge_plus_disk">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">render_bulge_plus_disk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">band</span><span class="p">,</span> <span class="n">source_params</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render a galaxy with given params.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            band (int): band</span>
+<span class="sd">            source_params (Tensor): Tensor containing the parameters for a particular source</span>
+<span class="sd">                (see prior.py for details about these parameters)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            GSObject: a galsim representation of the rendered galaxy</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">disk_flux</span> <span class="o">=</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">][</span><span class="n">band</span><span class="p">]</span> <span class="o">*</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_disk_frac&quot;</span><span class="p">]</span>
+        <span class="n">bulge_frac</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_disk_frac&quot;</span><span class="p">]</span>
+        <span class="n">bulge_flux</span> <span class="o">=</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">][</span><span class="n">band</span><span class="p">]</span> <span class="o">*</span> <span class="n">bulge_frac</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_beta_radians&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">galsim</span><span class="o">.</span><span class="n">radians</span>
+
+        <span class="n">components</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">disk_flux</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">b_d</span> <span class="o">=</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_disk_q&quot;</span><span class="p">]</span>
+            <span class="n">disk_hlr_arcsecs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">b_d</span><span class="p">)</span>
+            <span class="n">disk</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Exponential</span><span class="p">(</span><span class="n">flux</span><span class="o">=</span><span class="n">disk_flux</span><span class="p">,</span> <span class="n">half_light_radius</span><span class="o">=</span><span class="n">disk_hlr_arcsecs</span><span class="p">)</span>
+            <span class="n">sheared_disk</span> <span class="o">=</span> <span class="n">disk</span><span class="o">.</span><span class="n">shear</span><span class="p">(</span><span class="n">q</span><span class="o">=</span><span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_disk_q&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span>
+            <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sheared_disk</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">bulge_flux</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">b_b</span> <span class="o">=</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_bulge_q&quot;</span><span class="p">]</span>
+            <span class="n">bulge_hlr_arcsecs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">b_b</span><span class="p">)</span>
+            <span class="n">bulge</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">DeVaucouleurs</span><span class="p">(</span><span class="n">flux</span><span class="o">=</span><span class="n">bulge_flux</span><span class="p">,</span> <span class="n">half_light_radius</span><span class="o">=</span><span class="n">bulge_hlr_arcsecs</span><span class="p">)</span>
+            <span class="n">sheared_bulge</span> <span class="o">=</span> <span class="n">bulge</span><span class="o">.</span><span class="n">shear</span><span class="p">(</span><span class="n">q</span><span class="o">=</span><span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;galaxy_bulge_q&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">)</span>
+            <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sheared_bulge</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="n">components</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Decoder.render_galaxy">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.decoder.Decoder.render_galaxy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">render_galaxy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">psf</span><span class="p">,</span> <span class="n">band</span><span class="p">,</span> <span class="n">source_params</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render a galaxy with given params and PSF.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            psf (List): a list of PSFs for each band</span>
+<span class="sd">            band (int): band</span>
+<span class="sd">            source_params (Tensor): Tensor containing the parameters for a particular source</span>
+<span class="sd">                (see prior.py for details about these parameters)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            GSObject: a galsim representation of the rendered galaxy convolved with the PSF</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">galaxy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_bulge_plus_disk</span><span class="p">(</span><span class="n">band</span><span class="p">,</span> <span class="n">source_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Convolution</span><span class="p">(</span><span class="n">galaxy</span><span class="p">,</span> <span class="n">psf</span><span class="p">[</span><span class="n">band</span><span class="p">])</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">source_renderers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">SourceType</span><span class="o">.</span><span class="n">STAR</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_star</span><span class="p">,</span>
+            <span class="n">SourceType</span><span class="o">.</span><span class="n">GALAXY</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_galaxy</span><span class="p">,</span>
+        <span class="p">}</span>
+
+<div class="viewcode-block" id="Decoder.pixel_shifts">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.decoder.Decoder.pixel_shifts">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pixel_shifts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate random pixel shifts and corresponding WCS list.</span>
+<span class="sd">        This function generates `n_shifts` random pixel shifts `shifts` and corresponding WCS list</span>
+<span class="sd">        `wcs` to undo these shifts, relative to `wcs[ref_band]`.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            shifts (np.ndarray): array of pixel shifts</span>
+<span class="sd">            wcs (List[WCS]): list of WCS objects</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n_bands</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">BANDS</span><span class="p">)</span>
+        <span class="n">shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="n">shifts</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">align_to_band</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+
+        <span class="n">wcs_base</span> <span class="o">=</span> <span class="n">WCS</span><span class="p">()</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">5.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">])</span>  <span class="c1"># dither this too for coadds?</span>
+        <span class="n">wcs_base</span><span class="o">.</span><span class="n">wcs</span><span class="o">.</span><span class="n">crpix</span> <span class="o">=</span> <span class="n">base</span>
+
+        <span class="n">wcs_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_bands</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">b</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">align_to_band</span><span class="p">:</span>
+                <span class="n">wcs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">wcs_base</span><span class="o">.</span><span class="n">low_level_wcs</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">bnd_wcs</span> <span class="o">=</span> <span class="n">WCS</span><span class="p">()</span>
+            <span class="n">bnd_wcs</span><span class="o">.</span><span class="n">wcs</span><span class="o">.</span><span class="n">crpix</span> <span class="o">=</span> <span class="n">base</span> <span class="o">+</span> <span class="n">shifts</span><span class="p">[</span><span class="n">b</span><span class="p">]</span>
+            <span class="n">wcs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bnd_wcs</span><span class="o">.</span><span class="n">low_level_wcs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">shifts</span><span class="p">,</span> <span class="n">wcs_list</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">coadd_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">images</span><span class="p">):</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">coadd_depth</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Coadd depth must be &gt; 1 to use coaddition.&quot;</span>
+        <span class="n">coadded_images</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="o">*</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]))</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">coadded_images</span><span class="p">[</span><span class="n">b</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">coadd_images</span><span class="p">(</span><span class="n">images</span><span class="p">[</span><span class="n">b</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">coadded_images</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+
+    <span class="c1"># pylint: disable=R0915</span>
+<div class="viewcode-block" id="Decoder.render_image">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.decoder.Decoder.render_image">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">render_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tile_cat</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render a single image from a tile catalog.&quot;&quot;&quot;</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_tiles_h</span><span class="p">,</span> <span class="n">n_tiles_w</span> <span class="o">=</span> <span class="n">tile_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">assert</span> <span class="n">batch_size</span> <span class="o">==</span> <span class="mi">1</span>
+
+        <span class="n">slen_h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">*</span> <span class="n">n_tiles_h</span>
+        <span class="n">slen_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">*</span> <span class="n">n_tiles_w</span>
+
+        <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">BANDS</span><span class="p">),</span> <span class="n">slen_h</span><span class="p">,</span> <span class="n">slen_w</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+        <span class="n">image_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="p">[</span><span class="n">image_idx</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_survey_background</span><span class="p">:</span>
+            <span class="c1"># sample background from a random position in the frame</span>
+            <span class="n">height</span><span class="p">,</span> <span class="n">width</span> <span class="o">=</span> <span class="n">frame</span><span class="p">[</span><span class="s2">&quot;background&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">h_diff</span><span class="p">,</span> <span class="n">w_diff</span> <span class="o">=</span> <span class="n">height</span> <span class="o">-</span> <span class="n">slen_h</span><span class="p">,</span> <span class="n">width</span> <span class="o">-</span> <span class="n">slen_w</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">h_diff</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">h_diff</span><span class="p">)</span>
+            <span class="n">w</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">w_diff</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">w_diff</span><span class="p">)</span>
+            <span class="n">background</span> <span class="o">=</span> <span class="n">frame</span><span class="p">[</span><span class="s2">&quot;background&quot;</span><span class="p">][:,</span> <span class="n">h</span> <span class="p">:</span> <span class="p">(</span><span class="n">h</span> <span class="o">+</span> <span class="n">slen_h</span><span class="p">),</span> <span class="n">w</span> <span class="p">:</span> <span class="p">(</span><span class="n">w</span> <span class="o">+</span> <span class="n">slen_w</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">background</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="n">image</span> <span class="o">+=</span> <span class="n">background</span>
+
+        <span class="n">full_cat</span> <span class="o">=</span> <span class="n">tile_cat</span><span class="o">.</span><span class="n">to_full_catalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span>
+        <span class="n">n_sources</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">full_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+        <span class="c1"># calibration: convert from (linear) physical units to electron counts</span>
+        <span class="c1"># use the specified flux_calibration ratios indexed by image_id</span>
+        <span class="n">avg_nelec_conv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">frame</span><span class="p">[</span><span class="s2">&quot;flux_calibration&quot;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_sources</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">full_cat</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">]</span> <span class="o">*=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">avg_nelec_conv</span><span class="p">,</span> <span class="s2">&quot;bands -&gt; 1 1 bands&quot;</span><span class="p">)</span>
+
+        <span class="c1"># generate random WCS shifts as manual image dithering via unaligning WCS</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">with_dither</span><span class="p">:</span>
+            <span class="n">pixel_shifts</span><span class="p">,</span> <span class="n">wcs_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel_shifts</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">band</span><span class="p">,</span> <span class="n">_band_letter</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">BANDS</span><span class="p">):</span>
+            <span class="n">band_img</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">array</span><span class="o">=</span><span class="n">image</span><span class="p">[</span><span class="n">band</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">pixel_scale</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_sources</span><span class="p">):</span>
+                <span class="n">source_params</span> <span class="o">=</span> <span class="n">full_cat</span><span class="o">.</span><span class="n">one_source</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+                <span class="n">source_type</span> <span class="o">=</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                <span class="n">renderer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source_renderers</span><span class="p">[</span><span class="n">source_type</span><span class="p">]</span>
+                <span class="n">gs_obj</span> <span class="o">=</span> <span class="n">renderer</span><span class="p">(</span><span class="n">frame</span><span class="p">[</span><span class="s2">&quot;psf_galsim&quot;</span><span class="p">],</span> <span class="n">band</span><span class="p">,</span> <span class="n">source_params</span><span class="p">)</span>
+                <span class="n">plocs0</span><span class="p">,</span> <span class="n">plocs1</span> <span class="o">=</span> <span class="n">source_params</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span>
+                <span class="n">plocs10</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">plocs1</span><span class="p">,</span> <span class="n">plocs0</span><span class="p">])</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">with_dither</span><span class="p">:</span>
+                    <span class="n">plocs10</span> <span class="o">+=</span> <span class="n">pixel_shifts</span><span class="p">[</span><span class="n">band</span><span class="p">]</span>
+
+                <span class="n">int_pixel_shift</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">plocs10</span><span class="p">)</span>
+                <span class="n">good_size</span> <span class="o">=</span> <span class="n">gs_obj</span><span class="o">.</span><span class="n">getGoodImageSize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">pixel_scale</span><span class="p">)</span>
+                <span class="n">origin</span> <span class="o">=</span> <span class="n">int_pixel_shift</span> <span class="o">-</span> <span class="p">(</span><span class="n">good_size</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+                <span class="n">top_right</span> <span class="o">=</span> <span class="n">origin</span> <span class="o">+</span> <span class="n">good_size</span>
+
+                <span class="n">bounds</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">BoundsI</span><span class="p">(</span><span class="n">origin</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">top_right</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">origin</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">top_right</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">bounds</span> <span class="o">=</span> <span class="n">bounds</span> <span class="o">&amp;</span> <span class="n">band_img</span><span class="o">.</span><span class="n">bounds</span>
+
+                <span class="n">offset</span> <span class="o">=</span> <span class="n">plocs10</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">slen_w</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">slen_h</span> <span class="o">/</span> <span class="mi">2</span><span class="p">])</span>
+                <span class="n">offset2</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">PositionD</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+                <span class="n">offset2</span> <span class="o">+=</span> <span class="n">band_img</span><span class="o">.</span><span class="n">true_center</span> <span class="o">-</span> <span class="n">bounds</span><span class="o">.</span><span class="n">true_center</span>
+
+                <span class="n">gs_obj</span><span class="o">.</span><span class="n">drawImage</span><span class="p">(</span>
+                    <span class="n">offset</span><span class="o">=</span><span class="n">offset2</span><span class="p">,</span>
+                    <span class="n">method</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">psf</span><span class="p">,</span> <span class="s2">&quot;psf_draw_method&quot;</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">),</span>
+                    <span class="n">add_to_image</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">image</span><span class="o">=</span><span class="n">band_img</span><span class="p">[</span><span class="n">bounds</span><span class="p">],</span>
+                <span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">with_noise</span><span class="p">:</span>
+                <span class="n">poisson_noise</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">PoissonNoise</span><span class="p">(</span><span class="n">sky_level</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+                <span class="n">band_img</span><span class="o">.</span><span class="n">addNoise</span><span class="p">(</span><span class="n">poisson_noise</span><span class="p">)</span>
+
+        <span class="c1"># we&#39;re producing sky subtracted images</span>
+        <span class="n">image</span> <span class="o">-=</span> <span class="n">background</span>
+
+        <span class="c1"># convert electron counts to physical units (now what we&#39;ve subtracted the background)</span>
+        <span class="n">image</span> <span class="o">/=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">avg_nelec_conv</span><span class="p">,</span> <span class="s2">&quot;bands -&gt; bands 1 1&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">with_dither</span><span class="p">:</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">align</span><span class="p">(</span><span class="n">image</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="p">[</span><span class="n">wcs_list</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">align_to_band</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">image</span><span class="p">),</span> <span class="n">frame</span><span class="p">[</span><span class="s2">&quot;psf_params&quot;</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="Decoder.render_images">
+<a class="viewcode-back" href="../../../api/bliss.html#bliss.simulator.decoder.Decoder.render_images">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">render_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tile_cat</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render images from a tile catalog.&quot;&quot;&quot;</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">tile_cat</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">images</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">psf_params</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">tile_cat</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="n">tc_one</span> <span class="o">=</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+            <span class="n">image</span><span class="p">,</span> <span class="n">psf_param</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_image</span><span class="p">(</span><span class="n">tc_one</span><span class="p">)</span>
+            <span class="n">images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+            <span class="n">psf_params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">psf_param</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">psf_params</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
