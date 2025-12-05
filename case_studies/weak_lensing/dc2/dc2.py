@@ -295,7 +295,14 @@ class LensingDC2DataModule(DC2DataModule):
         data_to_cache = unpack_dict(data_splits)
 
         for i in range(self.n_image_split**2):  # noqa: WPS426
-            cached_data_file_name = f"cached_data_{image_index:04d}_{i:04d}_size_1.pt"
+            r = int(
+                1000 * round(data_to_cache[i]["tile_catalog"]["ra"].abs().nanmedian().item(), 3)
+            )
+            tract = int(r > 58400)
+            d = int(
+                1000 * round(data_to_cache[i]["tile_catalog"]["dec"].abs().nanmedian().item(), 3)
+            )
+            cached_data_file_name = f"cached_data_dec{tract}{d}_ra{r}_size_1.pt"
             tmp = data_to_cache[i]
             tmp_clone = map_nested_dicts(
                 tmp, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
