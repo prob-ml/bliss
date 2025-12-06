@@ -29,6 +29,7 @@ truth_df = truth_cat.get_quantities(
         "id",
         "match_objectId",
         "tract",
+        "is_unique_truth_entry",
         "truth_type",
         "ra",
         "dec",
@@ -51,8 +52,6 @@ truth_df = truth_cat.get_quantities(
 truth_df = pd.DataFrame(truth_df)
 
 truth_df = truth_df[truth_df["truth_type"] == 1]
-
-truth_df = truth_df[truth_df["flux_r"] >= 200]
 
 max_ra = np.nanmax(truth_df["ra"])
 min_ra = np.nanmin(truth_df["ra"])
