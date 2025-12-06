@@ -26,7 +26,7 @@ class WeakLensingNet(nn.Module):
         if n_var_params is not None:
             ch_final = max(ch_final, 2 ** math.ceil(math.log2(n_var_params)))
 
-        res_midpoint = int(math.sqrt(n_pixels_per_side * n_tiles_per_side))
+        res_midpoint = 128
 
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, ch_init, [ch_per_band, 5, 5], padding=[0, 2, 2]),
