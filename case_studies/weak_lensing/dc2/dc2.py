@@ -298,7 +298,7 @@ class LensingDC2DataModule(DC2DataModule):
             r = int(
                 1000 * round(data_to_cache[i]["tile_catalog"]["ra"].abs().nanmedian().item(), 3)
             )
-            tract = int(r > 58400)
+            tract = int(r > 58800)
             d = int(
                 1000 * round(data_to_cache[i]["tile_catalog"]["dec"].abs().nanmedian().item(), 3)
             )
