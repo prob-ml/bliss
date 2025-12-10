@@ -48,9 +48,9 @@ encoder:
     _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     reference_band: 2  # r-band
-    tile_slen: 128
+    tile_slen: 256
     n_pixels_per_side: 2048
-    n_tiles_per_side: 16
+    n_tiles_per_side: 8
     ch_init: 64
     ch_max: 1024
     ch_final: 128
@@ -60,8 +60,8 @@ encoder:
     optimizer_params:
         lr: 1e-4
     scheduler_params:
-        milestones: []
-        gamma: 1.0
+        milestones: [32]
+        gamma: 0.1
     image_normalizers: ${lensing_normalizers_nanpsf}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
@@ -90,7 +90,7 @@ surveys:
         dc2_cat_path: ${paths.dc2}/dc2_lensing_catalog.pkl
         image_slen: 4096
         n_image_split: 2  # split into n_image_split**2 subimages
-        tile_slen: 128
+        tile_slen: 256
         splits: 0:80/80:90/90:100
         avg_ellip_kernel_size: 15  # must be odd
         avg_ellip_kernel_sigma: 15
@@ -98,7 +98,7 @@ surveys:
         num_redshift_bins: 4  # length of redshift_quantiles
         batch_size: 1
         num_workers: 1
-        cached_data_path: ${paths.dc2}/dc2_lensing_splits_redbin4
+        cached_data_path: ${paths.dc2}/dc2_lensing_splits
         train_transforms:
             - _target_: case_studies.weak_lensing.data_augmentation.LensingRotateFlipTransform
         shuffle_file_order: false  # partition train/val/test by ra/dec so that we can compute 2PCFs on spatially contiguous test set
@@ -106,8 +106,8 @@ surveys:
 train:
     trainer:
         logger:
-            name: WeakLensingResultsDC2
-            version: ${now:%Y-%m-%d_%H-%M}
+            name: ResultsDC2
+            version: nanpsf_${encoder.ch_max}_${encoder.initial_downsample}_${encoder.more_up_layers}
         max_epochs: 300
         devices: 1
         use_distributed_sampler: false
