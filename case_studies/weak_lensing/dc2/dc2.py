@@ -298,11 +298,11 @@ class LensingDC2DataModule(DC2DataModule):
             r = int(
                 1000 * round(data_to_cache[i]["tile_catalog"]["ra"].abs().nanmedian().item(), 3)
             )
-            tract = int(r > 58800)
+            test_set_mask = int(r < 56400)
             d = int(
                 1000 * round(data_to_cache[i]["tile_catalog"]["dec"].abs().nanmedian().item(), 3)
             )
-            cached_data_file_name = f"cached_data_dec{tract}{d}_ra{r}_size_1.pt"
+            cached_data_file_name = f"cached_data_dec{test_set_mask}{d}_ra{r}_size_1.pt"
             tmp = data_to_cache[i]
             tmp_clone = map_nested_dicts(
                 tmp, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
