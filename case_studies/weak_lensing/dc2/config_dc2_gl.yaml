@@ -62,7 +62,7 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    image_normalizers: ${lensing_normalizers_nanpsf}
+    image_normalizers: ${lensing_normalizers_nan}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${encoder.tile_slen}
