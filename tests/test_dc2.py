@@ -19,7 +19,7 @@ class TestDC2:
         dc2 = list(dc2.train_dataloader())
 
         assert dc2[0]["images"].shape[1] == 6
-        assert len(dc2) == 5
+        assert len(dc2) == 7  # n_image_split=3 → 9 tiles, 80% train split → 7 batches
 
         params = (
             "locs",
