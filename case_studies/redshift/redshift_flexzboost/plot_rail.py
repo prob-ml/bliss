@@ -8,7 +8,6 @@ import pandas as pd
 from hydra import compose, initialize
 from matplotlib import pyplot as plt
 
-
 # %% configs
 with initialize(config_path="../", version_base=None):
     cfg = compose("artifact_creation")

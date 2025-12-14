@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import torch
 from hydra.utils import instantiate
 from torch.utils.data import DataLoader
@@ -135,6 +136,7 @@ class TestMetrics:
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0
 
+    @pytest.mark.run_first
     def test_photo_decals_catalogs_matches(self, cfg):
         """Compares catalogs as safety check for metrics."""
         sdss = instantiate(cfg.surveys.sdss, load_image_data=False)

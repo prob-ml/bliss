@@ -107,6 +107,7 @@ class Decoder(nn.Module):
 
     def pixel_shifts(self):
         """Generate random pixel shifts and corresponding WCS list.
+
         This function generates `n_shifts` random pixel shifts `shifts` and corresponding WCS list
         `wcs` to undo these shifts, relative to `wcs[ref_band]`.
 

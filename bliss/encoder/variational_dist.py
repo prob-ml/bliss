@@ -30,7 +30,7 @@ class VariationalDist(torch.nn.Module):
     def _factor_param_pairs(self, x_cat):
         split_sizes = [v.n_params for v in self.factors]
         dist_params_lst = torch.split(x_cat, split_sizes, 3)
-        return zip(self.factors, dist_params_lst)
+        return zip(self.factors, dist_params_lst, strict=True)
 
     def sample(self, x_cat, use_mode=False, return_base_cat=False):
         fp_pairs = self._factor_param_pairs(x_cat)

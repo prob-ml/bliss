@@ -1,9 +1,9 @@
 import numpy as np
-from astropy import constants as astroc, units
+from astropy import constants as astroc
+from astropy import units
 from astropy.cosmology import FlatLambdaCDM
 from colossus.cosmology import cosmology
 from colossus.halo import concentration, mass_defs
-
 
 # Here you need to set your cosmology to the one used in the paper where M500 is given
 # The baryon fraction and sigma8 are likely these params, perhaps double check

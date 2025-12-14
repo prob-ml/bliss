@@ -11,7 +11,6 @@ from hydra import compose, initialize
 from rail.core.stage import RailStage  # pylint: disable=import-error
 from rail.estimation.algos.flexzboost import FlexZBoostEstimator  # pylint: disable=import-error
 
-
 logging.basicConfig(level=logging.INFO)
 RailStage.data_store.__class__.allow_overwrite = True
 

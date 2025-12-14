@@ -8,12 +8,7 @@ import torch
 from bliss.main import generate, predict, train
 from bliss.surveys.des import DarkEnergySurvey as DES
 
-
-@pytest.fixture(autouse=True)
-def patch_align(monkeypatch):
-    # align is quite slow, so we replace it with the identity function
-    identity = lambda x, *_args, **_kwargs: x
-    monkeypatch.setattr("bliss.surveys.survey.align", identity)
+pytestmark = pytest.mark.usefixtures("patch_align")
 
 
 class TestGenerate:
@@ -54,10 +49,12 @@ class TestGenerate:
 
 
 class TestTrain:
+    @pytest.mark.run_first
     def test_train_sdss(self, cfg, tmp_path):
         generate(cfg.generate)
         train(cfg.train)
 
+    @pytest.mark.run_first
     def test_train_des(self, cfg, tmp_path):
         cfg.decoder.survey = "${surveys.des}"
         cfg.decoder.with_dither = False

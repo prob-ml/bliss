@@ -6,7 +6,6 @@ from omegaconf import DictConfig, OmegaConf
 
 from case_studies.redshift.artifacts.redshift_dc2 import RedshiftDC2DataModule
 
-
 logging.basicConfig(level=logging.INFO)
 
 

@@ -19,7 +19,6 @@ from torchvision import transforms
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.global_env import GlobalEnv
 
-
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
 warnings.filterwarnings(
     "ignore", ".*does not have many workers which may be a bottleneck.*", UserWarning
@@ -194,9 +193,10 @@ class ChunkingDataset(Dataset):
                 epoch_seed,
             )
             right_shift_list = [0, *accumulated_file_sizes_list[:-1]]
-            for start, end in zip(right_shift_list, accumulated_file_sizes_list):
-                output_list.append(random.Random(epoch_seed).sample(range(start, end), end - start))
-            random.Random(epoch_seed).shuffle(output_list)
+            for start, end in zip(right_shift_list, accumulated_file_sizes_list, strict=True):
+                rng = random.Random(epoch_seed)  # noqa: S311
+                output_list.append(rng.sample(range(start, end), end - start))
+            random.Random(epoch_seed).shuffle(output_list)  # noqa: S311
             # flatten the list
             return functools.reduce(operator.iadd, output_list, [])
 

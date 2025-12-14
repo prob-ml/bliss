@@ -1,7 +1,6 @@
 import random
 import sys
 
-
 n1 = random.uniform(2.5, 4.4)
 half_light_radius = random.uniform(1, 3)
 flux1 = random.uniform(0.2, 0.4)

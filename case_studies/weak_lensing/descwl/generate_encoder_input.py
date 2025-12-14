@@ -14,7 +14,6 @@ import yaml
 # Import TileCatalog to match second script's approach
 from bliss.catalog import TileCatalog
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

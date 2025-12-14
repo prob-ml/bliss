@@ -6,7 +6,6 @@ from scipy.stats import gennorm
 from bliss.catalog import convert_mag_to_nmgy
 from case_studies.galaxy_clustering.utils.cluster_utils import angular_diameter_distance
 
-
 CLUSTER_CATALOG_PATH = "redmapper_sva1-expanded_public_v6.3_members.fits"
 SVA_PATH = "/data/scratch/des/sva1_gold_r1.0_catalog.fits"
 PHOTO_Z_PATH = "/data/scratch/des/sva1_gold_r1.0_annz2_point.fits"

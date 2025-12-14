@@ -20,7 +20,6 @@ from bliss.encoder.sample_image_renders import plot_plocs
 from bliss.surveys.des import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 
-
 environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 torch.set_grad_enabled(False)

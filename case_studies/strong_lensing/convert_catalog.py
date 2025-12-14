@@ -1,7 +1,6 @@
 import numpy as np
 from astropy.table import Table
 
-
 t = {
     "IDENT": "i4",
     "RA": "f8",

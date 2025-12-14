@@ -18,7 +18,6 @@ from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.survey import Survey
 
-
 SDSSFields = List[TypedDict("SDSSField", {"run": int, "camcol": int, "fields": List[int]})]
 
 
@@ -102,7 +101,7 @@ class SloanDigitalSkySurvey(Survey):
                     gain = fieldgains[fieldnums == field][0]
                     self.rcfgcs.append((run, camcol, field, gain))
             else:
-                for field, gain in zip(fieldnums, fieldgains):
+                for field, gain in zip(fieldnums, fieldgains, strict=True):
                     self.rcfgcs.append((run, camcol, field, gain))
 
         self.downloader.download_images()

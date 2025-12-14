@@ -33,7 +33,7 @@ def split_list(ori_list, sub_list_len):
 
 
 def unpack_dict(ori_dict):
-    return [dict(zip(ori_dict, v)) for v in zip(*ori_dict.values())]
+    return [dict(zip(ori_dict, v, strict=True)) for v in zip(*ori_dict.values(), strict=True)]
 
 
 def split_tensor(
@@ -327,7 +327,7 @@ class DC2FullCatalog(FullCatalog):
         if suffix == ".parquet":
             catalog = pd.read_parquet(cat_path)
         elif suffix in (".pkl", ".pickle"):
-            catalog = pd.read_pickle(cat_path)
+            catalog = pd.read_pickle(cat_path)  # noqa: S301
         else:
             raise ValueError(f"Unsupported catalog file format: {suffix}")
 

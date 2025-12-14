@@ -1,6 +1,5 @@
 import numpy as np
 
-
 try:
     import pyccl as ccl
 except ModuleNotFoundError as err:

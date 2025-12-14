@@ -9,7 +9,6 @@ import pandas as pd
 from GCRCatalogs import GCRQuery
 from GCRCatalogs.helpers.tract_catalogs import tract_filter
 
-
 GCRCatalogs.set_root_dir("/data/scratch/dc2_nfs/")
 
 file_name = "dc2_lensing_catalog_objectmatch.pkl"

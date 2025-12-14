@@ -14,7 +14,6 @@ from scipy.stats import linregress
 
 from bliss.global_env import GlobalEnv
 
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Navigate to the BLISS root directory

@@ -59,6 +59,7 @@ dev = [
     "healpy>=1.16.6",
     "h5py>=3.11.0",
     "pytest>=8.2.2",
+    "pytest-xdist>=3.5.0",
     "tensorboard>=2.20.0",
 ]
 
@@ -78,6 +79,9 @@ packages = ["bliss"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
+markers = [
+  "run_first: mark test to run first for parallel test scheduling",
+]
 filterwarnings = [
   "ignore:.*does not have many workers which may be a bottleneck.*:UserWarning",
   "ignore:GPU available but not used.*:UserWarning",
@@ -126,17 +130,9 @@ select = [
 ignore = [
     # === Docstring Rules ===
     "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
-    "D205",   # 1 blank line required between summary and description
-    "D400",   # First line should end with a period
 
     # === Security Rules ===
     "S101",   # Use of assert (useful for testing/development)
-    "S301",   # pickle security
-    "S403",   # pickle/shelve modules
-    "S311",   # pseudo-random generators
-
-    # === Style/Formatting ===
-    "E203",   # Whitespace before ':' (Black compatibility)
     "E731",   # Lambda assignment
 
     # === Naming Conventions ===
@@ -153,12 +149,7 @@ ignore = [
     "PLR2004",  # Magic value comparison
     "PLR0904",  # Too many public methods
     "PLW0603",  # Global statement
-    "PLW2901",  # Redefined loop variable
     "PLC0415",  # Import outside top-level
-
-    # === Bugbear ===
-    "B028",   # No explicit stacklevel in warnings
-    "B905",   # zip without strict= (not required pre-3.10 style)
 
     # === Complexity ===
     "C901",   # Function too complex
@@ -171,14 +162,9 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.ruff.lint.isort]
-combine-as-imports = true
-force-single-line = false
-lines-after-imports = 2
-
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "PLR2004", "D"]
 "conftest.py" = ["D"]
 "__init__.py" = ["D104"]
-"case_studies/*" = ["D", "E501", "N803", "N806", "B006", "B007", "B905", "RUF012", "RUF013"]
+"case_studies/*" = ["D", "E501", "N803", "N806", "B006", "B007", "B028", "B905", "PLW2901", "RUF012", "RUF013", "S301", "S311"]
 "*.ipynb" = ["E501", "N803", "N806", "B006", "B007", "B905", "E402", "F821", "RUF012", "RUF013"]

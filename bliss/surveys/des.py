@@ -22,7 +22,6 @@ from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
 
-
 SkyCoord = TypedDict(
     "SkyCoord",
     {"ra": float, "dec": float},
@@ -320,7 +319,8 @@ class DESDownloader(SurveyDownloader):
             download_file_to_dst(image_table[sel][0]["access_url"], image_dst_filename)
         except IndexError as e:
             warnings.warn(
-                f"Desired image with basename {image_basename} not found in SIA database."
+                f"Desired image with basename {image_basename} not found in SIA database.",
+                stacklevel=2,
             )
             raise e
         except HTTPError as e:

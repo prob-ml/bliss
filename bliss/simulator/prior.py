@@ -151,9 +151,9 @@ class CatalogPrior(pl.LightningModule):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             with open(self.star_color_model_path, "rb") as f:
-                gmm_star = pickle.load(f)
+                gmm_star = pickle.load(f)  # noqa: S301
             with open(self.gal_color_model_path, "rb") as f:
-                gmm_gal = pickle.load(f)
+                gmm_gal = pickle.load(f)  # noqa: S301
         return gmm_star, gmm_gal
 
     def _sample_flux_ratios(self, gmm) -> Tuple[Tensor, Tensor]:

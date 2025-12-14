@@ -5,7 +5,6 @@ import torch
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 
-
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
 
 

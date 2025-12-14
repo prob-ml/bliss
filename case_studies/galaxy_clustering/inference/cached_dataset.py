@@ -7,7 +7,6 @@ from astropy.io import fits
 from torch import distributed
 from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 
-
 CACHED_DATA_PATH = (
     "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles"
 )

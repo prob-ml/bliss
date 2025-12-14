@@ -1,6 +1,7 @@
 # pylint: disable=too-many-branches,too-many-statements
 import numpy as np
-from matplotlib import patches, pyplot as plt
+from matplotlib import patches
+from matplotlib import pyplot as plt
 
 
 def psi(h, w, K=64):
