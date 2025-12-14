@@ -9,6 +9,7 @@ import pandas as pd
 from GCRCatalogs import GCRQuery
 from GCRCatalogs.helpers.tract_catalogs import tract_filter
 
+
 GCRCatalogs.set_root_dir("/data/scratch/dc2_nfs/")
 
 file_name = "dc2_lensing_catalog.pkl"
@@ -19,7 +20,7 @@ if file_already_populated:
     raise FileExistsError(f"{file_path} already exists.")
 
 
-print("Loading truth...\n")  # noqa: WPS421
+print("Loading truth...\n")
 
 truth_cat = GCRCatalogs.load_catalog("desc_dc2_run2.2i_dr6_truth")
 
@@ -69,7 +70,7 @@ ipix = hp.query_polygon(32, vertices, inclusive=True)
 healpix_filter = GCRQuery((lambda h: np.isin(h, ipix, assume_unique=True), "healpix_pixel"))
 
 
-print("Loading object-with-truth-match...\n")  # noqa: WPS421
+print("Loading object-with-truth-match...\n")
 
 object_truth_cat = GCRCatalogs.load_catalog("desc_dc2_run2.2i_dr6_object_with_truth_match")
 
@@ -110,7 +111,7 @@ object_truth_df = object_truth_cat.get_quantities(
 object_truth_df = pd.DataFrame(object_truth_df)
 
 
-print("Loading CosmoDC2...\n")  # noqa: WPS421
+print("Loading CosmoDC2...\n")
 
 config_overwrite = {"catalog_root_dir": "/data/scratch/dc2_nfs/cosmoDC2_v1.1.4"}
 
@@ -135,7 +136,7 @@ cosmo_df = cosmo_cat.get_quantities(
 cosmo_df = pd.DataFrame(cosmo_df)
 
 
-print("Merging truth with object-with-truth-match...\n")  # noqa: WPS421
+print("Merging truth with object-with-truth-match...\n")
 
 merge_df1 = truth_df.merge(
     object_truth_df, left_on="cosmodc2_id", right_on="cosmodc2_id_truth", how="left"
@@ -146,7 +147,7 @@ merge_df1.drop_duplicates(subset=["cosmodc2_id"], inplace=True)
 merge_df1.drop(columns=["cosmodc2_id_truth"], inplace=True)
 
 
-print("Merging with CosmoDC2...\n")  # noqa: WPS421
+print("Merging with CosmoDC2...\n")
 
 merge_df2 = merge_df1.merge(cosmo_df, left_on="cosmodc2_id", right_on="galaxy_id", how="left")
 
@@ -157,9 +158,9 @@ merge_df2.drop(columns=["ra_y", "dec_y"], inplace=True)
 merge_df2.rename(columns={"ra_x": "ra", "dec_x": "dec"}, inplace=True)
 
 
-print("Saving...\n")  # noqa: WPS421
+print("Saving...\n")
 
 with open(file_path, "wb") as f:
     pkl.dump(merge_df2, f)
 
-print(f"Catalog has been saved at {file_path}")  # noqa: WPS421
+print(f"Catalog has been saved at {file_path}")

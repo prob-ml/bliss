@@ -1,5 +1,7 @@
+import functools
 import logging
 import math
+import operator
 import os
 import pathlib
 import random
@@ -16,6 +18,7 @@ from torchvision import transforms
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.global_env import GlobalEnv
+
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -195,7 +198,7 @@ class ChunkingDataset(Dataset):
                 output_list.append(random.Random(epoch_seed).sample(range(start, end), end - start))
             random.Random(epoch_seed).shuffle(output_list)
             # flatten the list
-            return sum(output_list, [])
+            return functools.reduce(operator.iadd, output_list, [])
 
         return list(range(0, len(self)))
 
@@ -230,7 +233,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.test_dataset = None
         self.predict_dataset = None
 
-    def setup(self, stage: str) -> None:  # noqa: WPS324
+    def setup(self, stage: str) -> None:
         if self.file_paths is None or self.slices is None:
             self._load_file_paths_and_slices()
 

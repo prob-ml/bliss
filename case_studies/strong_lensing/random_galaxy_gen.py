@@ -1,6 +1,7 @@
 import random
 import sys
 
+
 n1 = random.uniform(2.5, 4.4)
 half_light_radius = random.uniform(1, 3)
 flux1 = random.uniform(0.2, 0.4)
@@ -20,4 +21,4 @@ y = random.randint(0, SIZE)
 
 
 gal_params = [n1, half_light_radius, flux1, n2, scale_radius, flux2, q, beta, x, y]
-print(" ".join(map(str, gal_params)))  # noqa: WPS421
+print(" ".join(map(str, gal_params)))

@@ -89,12 +89,12 @@ class DC2DataModule(CachedSimulatedDataModule):
         self.prepare_data_processes_num = prepare_data_processes_num
         self.data_in_one_cached_file = data_in_one_cached_file
 
-        assert (
-            self.image_lim[0] == self.image_lim[1]
-        ), "image_lim[0] should be equal to image_lim[1]"
-        assert (
-            self.image_lim[0] % self.n_image_split == 0
-        ), "image_lim is not divisible by n_image_split"
+        assert self.image_lim[0] == self.image_lim[1], (
+            "image_lim[0] should be equal to image_lim[1]"
+        )
+        assert self.image_lim[0] % self.n_image_split == 0, (
+            "image_lim is not divisible by n_image_split"
+        )
         assert (self.image_lim[0] // self.n_image_split) % self.tile_slen == 0, "invalid tile_slen"
 
         self.bands = self.BANDS
@@ -124,7 +124,7 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         return n_image
 
-    def prepare_data(self):  # noqa: WPS324
+    def prepare_data(self):
         if self.cached_data_path.exists():
             logger = logging.getLogger("DC2DataModule")
             warning_msg = "WARNING: cached data already exists at [%s], we directly use it\n"
@@ -280,10 +280,9 @@ class DC2DataModule(CachedSimulatedDataModule):
             sub_list_len=self.data_in_one_cached_file,
         )
 
-        data_count = 0
-        for sub_splits in data_splits:  # noqa: WPS426
+        for data_count, sub_splits in enumerate(data_splits):
             tmp_data_cached = []
-            for split in sub_splits:  # noqa: WPS426
+            for split in sub_splits:
                 split_clone = map_nested_dicts(
                     split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
                 )
@@ -297,7 +296,6 @@ class DC2DataModule(CachedSimulatedDataModule):
             cached_data_file_path = self.cached_data_path / cached_data_file_name
             with open(cached_data_file_path, "wb") as cached_data_file:
                 torch.save(tmp_data_cached, cached_data_file)
-            data_count += 1
 
     def read_image_for_bands(self, image_index):
         image_list = []

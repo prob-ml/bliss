@@ -22,6 +22,7 @@ from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
 
+
 SkyCoord = TypedDict(
     "SkyCoord",
     {"ra": float, "dec": float},
@@ -310,7 +311,8 @@ class DESDownloader(SurveyDownloader):
     def download_image(self, brickname, sky_coord, image_basename):
         """Download image for specified band, for this brick/ccd."""
         image_table = self.svc.search((sky_coord["ra"], sky_coord["dec"])).to_table()
-        sel = defchararray.find(image_table["access_url"].astype(str), image_basename) != -1
+        access_urls = image_table["access_url"].filled("").astype(str)
+        sel = defchararray.find(access_urls, image_basename) != -1
         image_dst_filename = (
             self.download_dir / brickname[:3] / brickname / f"{image_basename}.fits"
         )
@@ -463,7 +465,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
 
         return torch.tensor(psf_params, dtype=torch.float32)
 
-    def get_psf_via_despsfex(self, des_image_id, px=0.0, py=0.0):  # noqa: W0237
+    def get_psf_via_despsfex(self, des_image_id, px=0.0, py=0.0):
         """Construct PSF image from PSFEx FITS files.
 
         Args:
@@ -474,7 +476,6 @@ class DES_PSF(ImagePSF):  # noqa: N801
         Returns:
             images (List[InterpolatedImage]): list of psf transformations for each band
         """
-
         brickname = des_image_id["decals_brickname"]
 
         # Filler PSF for bands not in `bands`
@@ -583,7 +584,7 @@ class TractorFullCatalog(FullCatalog):
         # filter out pixels that aren't in primary region, had issues with source fitting,
         # in SGA large galaxy, or in a globular cluster. In the future this should probably
         # be an input parameter.
-        bitmask = 0b0011010000000001  # noqa: WPS339
+        bitmask = 0b0011010000000001
 
         objid = column_to_tensor(table, "OBJID")
         objc_type = table["TYPE"].data.astype(str)

@@ -10,6 +10,7 @@ from pyarrow import parquet as pq
 from bliss.catalog import TileCatalog
 from bliss.encoder.encoder import Encoder
 
+
 logging.basicConfig(level=logging.INFO)
 
 

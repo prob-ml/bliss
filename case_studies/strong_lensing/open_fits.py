@@ -3,6 +3,7 @@ import sys
 from astropy.io import fits
 from matplotlib import pyplot as plt
 
+
 i = sys.argv[1]
 OUTPUT_DIR = sys.argv[2]
 

@@ -18,6 +18,7 @@ from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.survey import Survey
 
+
 SDSSFields = List[TypedDict("SDSSField", {"run": int, "camcol": int, "fields": List[int]})]
 
 
@@ -193,7 +194,7 @@ class SloanDigitalSkySurvey(Survey):
 
         sky_y = sky_y.clip(0, sky_small.shape[0] - 1)
         sky_x = sky_x.clip(0, sky_small.shape[1] - 1)
-        large_points = rearrange(np.meshgrid(sky_y, sky_x), "n x y -> y x n")
+        large_points = rearrange(np.stack(np.meshgrid(sky_y, sky_x), axis=0), "n x y -> y x n")
         large_sky = sky_interp(large_points)
         large_sky_nelec = large_sky * gain
 
@@ -492,7 +493,6 @@ class SDSS_PSF(ImagePSF):  # noqa: N801
         Returns:
             The psf function evaluated at r.
         """
-
         term1 = torch.exp(-(r**2) / (2 * sigma1))
         term2 = b * torch.exp(-(r**2) / (2 * sigma2))
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
@@ -504,7 +504,7 @@ def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     # reshape nelec_per_nmgy_per_band to (1, 1, 1, 1, {n_bands}) to broadcast
     nelec_per_nmgy_per_band = torch.tensor(nelec_per_nmgy_per_band, device=est_cat.device)
     nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.view(1, 1, 1, 1, -1)
-    for key in est_cat.keys():
+    for key in est_cat:
         if key.endswith(fluxes_suffix):
             est_cat[key] = est_cat[key] / nelec_per_nmgy_per_band
     return est_cat

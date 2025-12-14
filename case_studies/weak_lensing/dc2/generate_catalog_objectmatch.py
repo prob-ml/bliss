@@ -9,6 +9,7 @@ import pandas as pd
 from GCRCatalogs import GCRQuery
 from GCRCatalogs.helpers.tract_catalogs import tract_filter
 
+
 GCRCatalogs.set_root_dir("/data/scratch/dc2_nfs/")
 
 file_name = "dc2_lensing_catalog_objectmatch.pkl"
@@ -19,7 +20,7 @@ if file_already_populated:
     raise FileExistsError(f"{file_path} already exists.")
 
 
-print("Loading object-with-truth-match...\n")  # noqa: WPS421
+print("Loading object-with-truth-match...\n")
 
 object_truth_cat = GCRCatalogs.load_catalog("desc_dc2_run2.2i_dr6_object_with_truth_match")
 
@@ -96,7 +97,7 @@ object_truth_df = object_truth_df[object_truth_df["truth_type"] == 1]
 object_truth_df.drop_duplicates(subset=["cosmodc2_id_truth"], inplace=True)
 
 
-print("Loading CosmoDC2...\n")  # noqa: WPS421
+print("Loading CosmoDC2...\n")
 
 config_overwrite = {"catalog_root_dir": "/data/scratch/dc2_nfs/cosmoDC2_v1.1.4"}
 cosmo_cat = GCRCatalogs.load_catalog("desc_cosmodc2", config_overwrite)
@@ -120,7 +121,7 @@ cosmo_df = cosmo_cat.get_quantities(
 cosmo_df = pd.DataFrame(cosmo_df)
 
 
-print("Merging...\n")  # noqa: WPS421
+print("Merging...\n")
 
 merge_df = object_truth_df.merge(
     cosmo_df, left_on="cosmodc2_id_truth", right_on="galaxy_id", how="left"
@@ -150,9 +151,9 @@ merge_df.rename(
 )
 
 
-print("Saving...\n")  # noqa: WPS421
+print("Saving...\n")
 
 with open(file_path, "wb") as f:
     pkl.dump(merge_df, f)
 
-print(f"Catalog has been saved at {file_path}")  # noqa: WPS421
+print(f"Catalog has been saved at {file_path}")

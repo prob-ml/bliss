@@ -192,7 +192,7 @@ class CatalogPrior(pl.LightningModule):
             flux_prop[:, band] = flux_prop[:, band - 1] * flux_ratio[:, band - 1]
 
         # Reshape drawn values into appropriate form
-        sample_dims = sample_dims + (self.n_bands,)
+        sample_dims = (*sample_dims, self.n_bands)
         return flux_prop.view(sample_dims)
 
     def _sample_galaxy_shape(self) -> Tuple[Tensor, Tensor]:

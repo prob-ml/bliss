@@ -30,23 +30,23 @@ class TestGenerate:
         with open(file_path, "rb") as f:
             cached_dataset = torch.load(f, weights_only=False)
             assert isinstance(cached_dataset, list), "cached_dataset must be a list"
-            assert isinstance(
-                cached_dataset[0], dict
-            ), "cached_dataset must be a list of dictionaries"
-            assert isinstance(
-                cached_dataset[0]["tile_catalog"], dict
-            ), "cached_dataset[0]['tile_catalog'] must be a dictionary"
-            assert isinstance(
-                cached_dataset[0]["images"], torch.Tensor
-            ), "cached_dataset[0]['images'] must be a torch.Tensor"
+            assert isinstance(cached_dataset[0], dict), (
+                "cached_dataset must be a list of dictionaries"
+            )
+            assert isinstance(cached_dataset[0]["tile_catalog"], dict), (
+                "cached_dataset[0]['tile_catalog'] must be a dictionary"
+            )
+            assert isinstance(cached_dataset[0]["images"], torch.Tensor), (
+                "cached_dataset[0]['images'] must be a torch.Tensor"
+            )
             correct_len = cfg.generate.n_batches_per_file * cfg.generate.prior.batch_size
             assert len(cached_dataset) == correct_len, (
                 f"cached_dataset has length {len(cached_dataset)}, "
                 f"but must be list of length {correct_len}"
             )
-            assert (
-                len(cached_dataset[0]["images"]) == 5
-            ), "cached_dataset[0]['images'] must be a 5-D tensor"
+            assert len(cached_dataset[0]["images"]) == 5, (
+                "cached_dataset[0]['images'] must be a 5-D tensor"
+            )
             assert cached_dataset[0]["images"][0].shape == (
                 cfg.prior.n_tiles_h * cfg.decoder.tile_slen,
                 cfg.prior.n_tiles_w * cfg.decoder.tile_slen,

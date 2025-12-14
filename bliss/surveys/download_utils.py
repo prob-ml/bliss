@@ -4,7 +4,7 @@ from pathlib import Path
 from astropy.utils.data import download_file
 
 
-def download_file_to_dst(url, dst_filename, preprocess_fn=lambda x: x):  # noqa: WPS404
+def download_file_to_dst(url, dst_filename, preprocess_fn=lambda x: x):
     dst_path = Path(dst_filename)
     if dst_path.exists():
         return

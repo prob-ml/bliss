@@ -73,7 +73,7 @@ def _test_tile_catalog_equal(left, right):
     _test_data_equal(left.data, right.data)
 
     return (
-        left.tile_slen == right.tile_slen  # noqa: WPS222
+        left.tile_slen == right.tile_slen
         and _test_tensor_all_close(left["locs"], right["locs"])
         and _test_tensor_all_close(left["n_sources"], right["n_sources"])
         and left.batch_size == right.batch_size
@@ -127,7 +127,7 @@ def _test_full_catalog_equal(left, right):
     _test_data_equal(left.data, right.data)
 
     return (
-        left.height == right.height  # noqa:WPS222
+        left.height == right.height
         and left.width == right.width
         and _test_tensor_all_close(left["plocs"], right["plocs"])
         and _test_tensor_all_close(left["n_sources"], right["n_sources"])

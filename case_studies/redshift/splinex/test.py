@@ -4,6 +4,7 @@ import torch
 
 from case_studies.redshift.splinex.bspline import DeclanBSpline
 
+
 min_val = 0.0
 max_val = 2 * math.pi
 nknots = 40

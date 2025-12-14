@@ -89,7 +89,7 @@ class Encoder(pl.LightningModule):
         # Generate all binary combinations for n^2 elements
         n = 2
         binary_combinations = list(itertools.product([0, 1], repeat=n * n))
-        mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)  # noqa: WPS114
+        mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)
         self.register_buffer("mask_patterns", mask_patterns)
 
         self.initialize_networks()

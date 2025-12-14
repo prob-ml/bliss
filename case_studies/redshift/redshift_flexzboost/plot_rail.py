@@ -1,4 +1,5 @@
 # %% imports
+import itertools
 from pathlib import Path
 
 import matplotlib
@@ -6,6 +7,7 @@ import numpy as np
 import pandas as pd
 from hydra import compose, initialize
 from matplotlib import pyplot as plt
+
 
 # %% configs
 with initialize(config_path="../", version_base=None):
@@ -259,8 +261,8 @@ axs[3].set_ylabel("CRPS")
 axs[4].set_ylabel("KS(PIT,Uniform)")
 axs[4].set_xlabel("Posterior Mean Redshift Bin")
 
-# x‐axis ticks
-tick_labels = [f"{lo:.1f}-{hi:.1f}" for lo, hi in zip(redshift_bins[:-1], redshift_bins[1:])]
+# x-axis ticks
+tick_labels = [f"{lo:.1f}-{hi:.1f}" for lo, hi in itertools.pairwise(redshift_bins)]
 axs[4].set_xticks(centers)
 axs[4].set_xticklabels(tick_labels, rotation=45, ha="right")
 

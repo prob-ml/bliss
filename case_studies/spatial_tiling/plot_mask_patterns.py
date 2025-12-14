@@ -3,6 +3,7 @@ import itertools
 import torch
 from matplotlib import pyplot as plt
 
+
 n = 2
 binary_combinations = list(itertools.product([0, 1], repeat=n * n))
 mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)

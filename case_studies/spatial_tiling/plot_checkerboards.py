@@ -1,7 +1,6 @@
 # pylint: disable=too-many-branches,too-many-statements
 import numpy as np
-from matplotlib import patches
-from matplotlib import pyplot as plt
+from matplotlib import patches, pyplot as plt
 
 
 def psi(h, w, K=64):
@@ -159,35 +158,33 @@ def _draw_block_borders(ax, grid_values, grid_size, K):
 
 def _print_grid_info(grid_values, grid_size, K, filename):
     """Print grid information and statistics."""
-    print(f"Grid saved as '{filename}'")  # noqa: WPS421
-    print(r"\nGrid values (Ψ(h,w) for each position):")  # noqa: WPS421
+    print(f"Grid saved as '{filename}'")
+    print(r"\nGrid values (Ψ(h,w) for each position):")
     sqrt_K = int(np.sqrt(K))
-    print(  # noqa: WPS421
-        f"Formula: Ψ(h,w) = ((h - 1) mod {sqrt_K}) × " f"{sqrt_K} + ((w - 1) mod {sqrt_K})"
-    )
-    print(r"Rows (h) go from top to bottom, Columns (w) go from left to right\n")  # noqa: WPS421
+    print(f"Formula: Ψ(h,w) = ((h - 1) mod {sqrt_K}) * {sqrt_K} + ((w - 1) mod {sqrt_K})")
+    print(r"Rows (h) go from top to bottom, Columns (w) go from left to right\n")
     for h in range(1, grid_size + 1):
         row_values = [int(psi(h, grid_w, K)) for grid_w in range(1, grid_size + 1)]
-        print(f"Row {h} ((h-1) mod {sqrt_K} = {(h - 1) % sqrt_K}): {row_values}")  # noqa: WPS421
+        print(f"Row {h} ((h-1) mod {sqrt_K} = {(h - 1) % sqrt_K}): {row_values}")
 
 
 def _print_examples(K):
     """Print example calculations."""
-    print(r"\nExample calculations:")  # noqa: WPS421
+    print(r"\nExample calculations:")
     sqrt_K = int(np.sqrt(K))
     examples = [(1, 1), (1, 8), (8, 1), (8, 8), (4, 5)]
     for h, example_w in examples:
         value = psi(h, example_w, K)
-        print(  # noqa: WPS421
-            f"Ψ({h},{example_w}) = (({h}-1) mod {sqrt_K}) × {sqrt_K} + "
-            f"(({example_w}-1) mod {sqrt_K}) = {(h - 1) % sqrt_K} × {sqrt_K} + "
+        print(
+            f"Ψ({h},{example_w}) = (({h}-1) mod {sqrt_K}) * {sqrt_K} + "
+            f"(({example_w}-1) mod {sqrt_K}) = {(h - 1) % sqrt_K} * {sqrt_K} + "
             f"{(example_w - 1) % sqrt_K} = {value:.0f}"
         )
 
 
 def _print_ck_sets(grid_size, K):
     """Print C_k sets (cells with the same Ψ value)."""
-    print(r"\nSets C_k (cells with the same Ψ value):")  # noqa: WPS421
+    print(r"\nSets C_k (cells with the same Ψ value):")
     value_to_cells = {}
     for h in range(1, grid_size + 1):
         for set_w in range(1, grid_size + 1):
@@ -196,7 +193,7 @@ def _print_ck_sets(grid_size, K):
                 value_to_cells[value] = []
             value_to_cells[value].append((h, set_w))
     for k in sorted(value_to_cells.keys()):
-        print(f"C_{k} = {value_to_cells[k]}")  # noqa: WPS421
+        print(f"C_{k} = {value_to_cells[k]}")
 
 
 def create_numbered_grid(K, grid_size=8, filename="numbered_grid.png"):

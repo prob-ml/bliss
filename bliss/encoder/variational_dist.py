@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 from einops import rearrange
-from torch.distributions import (  # noqa: WPS235
+from torch.distributions import (
     AffineTransform,
     Categorical,
     Distribution,
@@ -55,7 +55,7 @@ class NullGating(NllGating):
         tc_keys = true_tile_cat.keys()
         if "n_sources" in tc_keys:
             return torch.ones_like(true_tile_cat["n_sources"]).bool()
-        first = true_tile_cat[list(tc_keys)[0]]
+        first = true_tile_cat[next(iter(tc_keys))]
         return torch.ones(first.shape[:-1]).bool().to(first.device)
 
 
@@ -285,7 +285,6 @@ class TruncatedDiagonalMVN(Distribution):
         Distribution is "multivariate" in that the last dimension of mu and sigma
         are considered event dimensions.
         """
-
         super().__init__(validate_args=False)
         multiple_normals = Normal(mu, sigma)  # all dims are batch dims, none are event
         self.base_dist = Independent(multiple_normals, 1)  # now last dim is event dim
@@ -308,7 +307,6 @@ class TruncatedDiagonalMVN(Distribution):
             Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
 
         """
-
         shape = sample_shape + self.batch_shape + self.event_shape
 
         # draw using inverse cdf method

@@ -7,6 +7,7 @@ from astropy.io import fits
 from torch import distributed
 from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 
+
 CACHED_DATA_PATH = (
     "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles"
 )
@@ -64,9 +65,9 @@ class DESDataset(Dataset):
 
     def _build_image(self, directory_path):
         dir_files = {
-            band: [
+            band: next(
                 f for f in os.listdir(f"{directory_path}") if f.endswith(f"{band}_nobkg.fits.fz")
-            ][0]
+            )
             for band in DES_BANDS
         }
         image_bands = []

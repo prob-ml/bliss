@@ -1,4 +1,3 @@
-# flake8: noqa: WPS220
 # pylint: disable=broad-exception-caught,too-many-statements
 import gc
 import logging
@@ -15,6 +14,7 @@ import yaml
 # Import TileCatalog to match second script's approach
 from bliss.catalog import TileCatalog
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ try:
 except ImportError:
     logger.info("tqdm not installed. Install with: pip install tqdm")
 
-    def tqdm(iterable, desc="", total=None):  # noqa: WPS440
+    def tqdm(iterable, desc="", total=None):
         return iterable
 
 
@@ -208,8 +208,7 @@ class MemoryControlledBatchProcessor:
             # Check memory after loading
             used_memory, total_memory, percent = get_memory_usage()
             logger.info(
-                f"Memory after loading: {used_memory:.1f}/"
-                f"{total_memory:.1f} GB ({percent:.1f}%)"
+                f"Memory after loading: {used_memory:.1f}/{total_memory:.1f} GB ({percent:.1f}%)"
             )
 
             # Process each image in the batch
@@ -284,7 +283,7 @@ class MemoryControlledBatchProcessor:
                             self.cleanup_memory()
 
                 except Exception as e:
-                    logger.error(f"Error processing image {idx} in batch {batch_id}: {str(e)}")
+                    logger.error(f"Error processing image {idx} in batch {batch_id}: {e!s}")
 
             # Clean up batch data
             del images, raw_catalogs, tile_catalog
@@ -298,7 +297,7 @@ class MemoryControlledBatchProcessor:
             return successful_saves
 
         except Exception as e:
-            logger.error(f"Error processing batch {batch_id}: {str(e)}")
+            logger.error(f"Error processing batch {batch_id}: {e!s}")
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return 0
 
@@ -338,7 +337,7 @@ def process_multiple_batches(
             image_dir, catalog_dir, image_pattern, catalog_pattern
         )
     except Exception as e:
-        logger.error(f"Error finding batch files: {str(e)}")
+        logger.error(f"Error finding batch files: {e!s}")
         return
 
     if not batch_pairs:
@@ -485,7 +484,7 @@ def main():
         )
 
     except Exception as e:
-        logger.error(f"Error occurred: {str(e)}")
+        logger.error(f"Error occurred: {e!s}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
         raise
 

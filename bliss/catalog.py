@@ -33,7 +33,6 @@ def convert_flux_to_magnitude(flux, zero_point):
     Returns:
         Tensor indicating fluxes in magnitude
     """
-
     return -2.5 * torch.log10(flux / zero_point)
 
 
@@ -626,9 +625,9 @@ class FullCatalog(UserDict):
             tile_params["n_sources"] = tile_n_sources
             return TileCatalog(tile_params)
         if not filter_oob:
-            assert torch.masked_select(
-                plocs_mask, mask=is_on_mask
-            ).all(), "find sources that are outside boundary"
+            assert torch.masked_select(plocs_mask, mask=is_on_mask).all(), (
+                "find sources that are outside boundary"
+            )
         # prepare plocs mask #
 
         # for each source, find how many sources share the same tile with it #
@@ -665,9 +664,7 @@ class FullCatalog(UserDict):
         max_shared_tiles = num_shared_tiles_per_source.max().item()
         if max_shared_tiles > max_sources_per_tile:
             if not ignore_extra_sources:
-                raise ValueError(  # noqa: WPS220
-                    "# of sources per tile exceeds `max_sources_per_tile`."
-                )
+                raise ValueError("# of sources per tile exceeds `max_sources_per_tile`.")
 
             for tile_k, tile_v in tile_params.items():
                 tile_params[tile_k] = self._pad_along_max_sources(tile_v, target_m=max_shared_tiles)

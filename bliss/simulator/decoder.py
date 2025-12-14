@@ -28,7 +28,6 @@ class Decoder(nn.Module):
             with_dither: if True, apply random pixel shifts to the images and align them
             with_noise: if True, add Poisson noise to the image pixels
         """
-
         super().__init__()
 
         self.tile_slen = tile_slen

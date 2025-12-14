@@ -1,6 +1,7 @@
 import numpy as np
 from astropy.table import Table
 
+
 t = {
     "IDENT": "i4",
     "RA": "f8",
@@ -42,10 +43,7 @@ with open("data/catalog.txt", "r", encoding="utf-8") as file:
         # Remove any quotes from string fields and split the line by comma
         values = line.replace("'", "").split(", ")
         # Check if image is lensed and extract lensing parameters
-        if values[15] == "1.0":
-            row = values[:31]
-        else:
-            row = values[:26] + [0, 0, 0, 0, 0]
+        row = values[:31] if values[15] == "1.0" else [*values[:26], 0, 0, 0, 0, 0]
         data.append(tuple(row))
 
 # Convert the list to a structured numpy array

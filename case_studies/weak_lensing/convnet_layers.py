@@ -19,12 +19,7 @@ class ResNetBlock(nn.Module):
             in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False
         )
         out_c_sqrt = math.sqrt(out_channels)
-        if out_c_sqrt.is_integer():
-            n_groups = int(out_c_sqrt)
-        else:
-            n_groups = int(
-                math.sqrt(out_channels * 2)
-            )  # even powers of 2 guaranteed to be perfect squares
+        n_groups = int(out_c_sqrt) if out_c_sqrt.is_integer() else int(math.sqrt(out_channels * 2))
         self.gn1 = nn.GroupNorm(num_groups=n_groups, num_channels=out_channels)
         self.silu = nn.SiLU(inplace=True)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
@@ -51,7 +46,7 @@ class ResNetBlock(nn.Module):
         out += identity
         out = self.silu(out)
 
-        return out  # noqa: WPS331
+        return out
 
 
 class ResNeXtBlock(nn.Module):
@@ -59,12 +54,9 @@ class ResNeXtBlock(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=1, stride=1, padding=0)
         mid_c_sqrt = math.sqrt(mid_channels)
-        if mid_c_sqrt.is_integer():
-            mid_norm_n_groups = int(mid_c_sqrt)
-        else:
-            mid_norm_n_groups = int(
-                math.sqrt(mid_channels * 2)
-            )  # even powers of 2 guaranteed to be perfect squares
+        mid_norm_n_groups = (
+            int(mid_c_sqrt) if mid_c_sqrt.is_integer() else int(math.sqrt(mid_channels * 2))
+        )
         self.gn1 = nn.GroupNorm(num_groups=mid_norm_n_groups, num_channels=mid_channels)
         self.conv2 = nn.Conv2d(
             mid_channels, mid_channels, kernel_size=3, stride=stride, padding=1, groups=groups
@@ -72,12 +64,9 @@ class ResNeXtBlock(nn.Module):
         self.gn2 = nn.GroupNorm(num_groups=mid_norm_n_groups, num_channels=mid_channels)
         self.conv3 = nn.Conv2d(mid_channels, out_channels, kernel_size=1, stride=1, padding=0)
         out_c_sqrt = math.sqrt(out_channels)
-        if out_c_sqrt.is_integer():
-            out_norm_n_groups = int(out_c_sqrt)
-        else:
-            out_norm_n_groups = int(
-                math.sqrt(out_channels * 2)
-            )  # even powers of 2 guaranteed to be perfect squares
+        out_norm_n_groups = (
+            int(out_c_sqrt) if out_c_sqrt.is_integer() else int(math.sqrt(out_channels * 2))
+        )
         self.gn3 = nn.GroupNorm(num_groups=out_norm_n_groups, num_channels=out_channels)
         self.silu = nn.SiLU(inplace=True)
 
@@ -103,4 +92,4 @@ class ResNeXtBlock(nn.Module):
             residual = self.shortcut(x)
         out += residual
         out = self.silu(out)
-        return out  # noqa: WPS331
+        return out
