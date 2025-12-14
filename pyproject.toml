@@ -78,11 +78,12 @@ build-backend = "hatchling.build"
 packages = ["bliss"]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra -v -n auto"
 markers = [
   "run_first: mark test to run first for parallel test scheduling",
 ]
 filterwarnings = [
+  "ignore:numpy.core.* is deprecated:DeprecationWarning",
   "ignore:.*does not have many workers which may be a bottleneck.*:UserWarning",
   "ignore:GPU available but not used.*:UserWarning",
   "ignore:numpy.ndarray size changed:RuntimeWarning",

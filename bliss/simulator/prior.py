@@ -185,6 +185,7 @@ class CatalogPrior(pl.LightningModule):
         flux_ratio = np.exp(flux_logdiff)
 
         # Computes the flux in each band as a proportion of the reference band flux
+        flux_ratio = torch.from_numpy(flux_ratio).float()
         flux_prop = torch.ones(flux_logdiff.shape[0], self.n_bands)
         for band in range(self.reference_band - 1, -1, -1):
             flux_prop[:, band] = flux_prop[:, band + 1] / flux_ratio[:, band]

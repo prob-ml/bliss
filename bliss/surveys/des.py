@@ -10,7 +10,7 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS, FITSFixedWarning
 from galsim import des as galsim_des
-from numpy.core import defchararray
+from numpy import char as defchararray
 from omegaconf import DictConfig
 from pyvo.dal import sia
 from scipy.interpolate import RectBivariateSpline
