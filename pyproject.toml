@@ -1,94 +1,89 @@
-[tool.poetry]
-authors = ["BLISS developers"]
-description = "Bayesian Light Source Separator"
-documentation = "https://prob-ml.github.io/bliss/"
-keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
-license = "MIT"
+[project]
 name = "bliss-toolkit"
-packages = [{include = "bliss"}]
-readme = "README.md"
-repository = "https://github.com/prob-ml/bliss"
 version = "0.4.2"
+description = "Bayesian Light Source Separator"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "BLISS developers"}
+]
+keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
+dependencies = [
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+    "numpy>=1.18.5",
+    "scipy>=1.4.1",
+    "matplotlib>=3.3.3",
+    "requests>=2.31.0",
+    "torchmetrics>=1.4.0.post0",
+    "lightning[extra]>=2.3.3",
+    "einops>=0.8.0",
+    "hydra-core>=1.0.4",
+    "astropy>=6.1.1",
+    "galsim>=2.4.10",
+    "reproject>=0.11.0",
+    "pyvo>=1.4.1",
+    "colossus>=1.3.5",
+    "lsstdesc-gcr-catalogs>=1.10.1",
+]
 
-[tool.poetry.scripts]
-bliss = "bliss.main:main"
-
-[tool.poetry.dependencies]
-python = "^3.12"
-# PyTorch with CUDA 12.8 support (includes cuDNN)
-# Works on both older GPUs (RTX 2080 Ti) and Blackwell GPUs (RTX 5090)
-# Check CUDA version: nvidia-smi
-torch = {version = "^2.7.0", source = "pytorch-cu128"}
-torchvision = {version = "^0.22.0", source = "pytorch-cu128"}
-numpy = ">=1.18.5"
-scipy = ">=1.4.1"
-matplotlib = ">=3.3.3"
-requests = "^2.31.0"
-torchmetrics = "^1.4.0.post0"
-lightning = {extras = ["extra"], version = "^2.3.3"}
-einops = "^0.8.0"
-hydra-core = ">=1.0.4"
-astropy = "^6.1.1"
-galsim = ">=2.4.10"
-reproject = ">=0.11.0"
-pyvo = "^1.4.1"
-colossus = "^1.3.5"
-lsstdesc-gcr-catalogs = "^1.10.1"
-
-[tool.poetry.group.dev.dependencies]
-Sphinx = ">=4.0.2"
-black = ">=22.3.0"
-darglint = ">=1.8.1"
-flake8 = ">=4.0.1"
-flake8-docstrings = ">=1.6.0"
-git-lfs = ">=1.6"
-ipykernel = "^6.29.5"
-isort = ">=5.9.3"
-jupyter = ">=1.0.0"
-nbstripout = ">=0.5.0"
-plotly = ">=4.14.3"
-pre-commit = ">=2.9.2"
-pre-commit-hooks = "^4.4.0"
-pylint = ">=3.3.5"
-pytest-cov = ">=2.10"
-sphinx-rtd-theme = ">=0.5.2"
-tqdm = ">=4.62.3"
-wemake-python-styleguide = ">=0.16.1"
-nbsphinx = "^0.9.2"
-pypandoc = "^1.11"
-scikit-learn = ">=0.24.2"
-seaborn = "^0.13.0"
-pyarrow = "^15.0.0"
-healpy = "^1.16.6"
-h5py = "^3.11.0"
-pytest = "^8.2.2"
-tensorboard = "^2.20.0"
-
-[build-system]
-build-backend = "poetry.core.masonry.api"
-requires = ["poetry-core>=1.0.0"]
-
-[tool.black]
-line-length = 100
-target-version = ['py312']
-
-[tool.isort]
-multi_line_output = 3
-profile = "black"
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-line_length = 100
-
-[[tool.poetry.source]]
+[[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
-priority = "supplemental"
+explicit = true
+
+[tool.uv.sources]
+torch = [{index = "pytorch-cu128"}]
+torchvision = [{index = "pytorch-cu128"}]
+
+[project.optional-dependencies]
+dev = [
+    "Sphinx>=4.0.2",
+    "git-lfs>=1.6",
+    "ipykernel>=6.29.5",
+    "jupyter>=1.0.0",
+    "nbstripout>=0.5.0",
+    "plotly>=4.14.3",
+    "pre-commit>=2.9.2",
+    "pre-commit-hooks>=4.4.0",
+    "pytest-cov>=2.10",
+    "ruff>=0.8.0",
+    "sphinx-rtd-theme>=0.5.2",
+    "tqdm>=4.62.3",
+    "nbsphinx>=0.9.2",
+    "pypandoc>=1.11",
+    "scikit-learn>=0.24.2",
+    "seaborn>=0.13.0",
+    "pyarrow>=15.0.0",
+    "healpy>=1.16.6",
+    "h5py>=3.11.0",
+    "pytest>=8.2.2",
+    "pytest-xdist>=3.5.0",
+    "tensorboard>=2.20.0",
+]
+
+[project.scripts]
+bliss = "bliss.main:main"
+
+[project.urls]
+Documentation = "https://prob-ml.github.io/bliss/"
+Repository = "https://github.com/prob-ml/bliss"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bliss"]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra -v -n auto"
+markers = [
+  "run_first: mark test to run first for parallel test scheduling",
+]
 filterwarnings = [
+  "ignore:numpy.core.* is deprecated:DeprecationWarning",
   "ignore:.*does not have many workers which may be a bottleneck.*:UserWarning",
   "ignore:GPU available but not used.*:UserWarning",
   "ignore:numpy.ndarray size changed:RuntimeWarning",
@@ -105,3 +100,72 @@ minversion = "6.0"
 testpaths = [
   "tests",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "D",      # pydocstyle
+    "S",      # flake8-bandit (security)
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "PL",     # Pylint
+    "RUF",    # Ruff-specific rules
+]
+
+ignore = [
+    # === Docstring Rules ===
+    "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
+
+    # === Security Rules ===
+    "S101",   # Use of assert (useful for testing/development)
+    "E731",   # Lambda assignment
+
+    # === Naming Conventions ===
+    "N812",   # Lowercase imported as non-lowercase (e.g., import F)
+    "N817",   # CamelCase imported as acronym
+
+    # === Pylint Rules ===
+    "PLR0913",  # Too many arguments
+    "PLR0914",  # Too many local variables
+    "PLR0915",  # Too many statements
+    "PLR0912",  # Too many branches
+    "PLR0911",  # Too many return statements
+    "PLR0917",  # Too many positional arguments
+    "PLR2004",  # Magic value comparison
+    "PLR0904",  # Too many public methods
+    "PLW0603",  # Global statement
+    "PLC0415",  # Import outside top-level
+
+    # === Complexity ===
+    "C901",   # Function too complex
+
+    # === Ruff-specific ===
+    "RUF012",  # Mutable class attributes (common in dataclass-like patterns)
+    "RUF013",  # Implicit Optional (common pattern, not enforced before)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "PLR2004", "D"]
+"conftest.py" = ["D"]
+"__init__.py" = ["D104"]
+"case_studies/*" = ["D", "E501", "N803", "N806", "B006", "B007", "B028", "B905", "PLW2901", "RUF012", "RUF013", "S301", "S311"]
+"*.ipynb" = ["E501", "N803", "N806", "B006", "B007", "B905", "E402", "F821", "RUF012", "RUF013"]

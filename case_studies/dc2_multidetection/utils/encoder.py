@@ -11,9 +11,9 @@ from case_studies.dc2_multidetection.utils.variational_dist import MultiVariatio
 
 class MultiDetectEncoder(MyBasicEncoder):
     def __init__(self, **kwargs):
-        assert isinstance(
-            kwargs["var_dist"], MultiVariationalDist
-        ), "var_dist should be MultiVariationalDist"
+        assert isinstance(kwargs["var_dist"], MultiVariationalDist), (
+            "var_dist should be MultiVariationalDist"
+        )
         one_to_topk = kwargs.pop("one_to_topk")
         super().__init__(**kwargs)
         assert one_to_topk > 1

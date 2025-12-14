@@ -24,15 +24,15 @@ from case_studies.redshift.old.network_rs import PhotoZFromMag
 @click.option("--epoch", help="Num of epoch to train", default=5000, type=int)
 @click.option("--resume", help="Resume from given network", metavar="[PATH|URL]", type=str)
 @click.option("--nick", help="Nickname for remember", type=str)
-def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
-    ###### Prepare Training set  # noqa: E266
-    print("start reading dataset!")  # noqa: WPS421
+def main(epoch, train_path, val_path, nick, resume, outdir):
+    ###### Prepare Training set
+    print("start reading dataset!")
 
     path_train = train_path
     path_val = val_path
     photo_z_train = pd.read_pickle(path_train)
     photo_z_val = pd.read_pickle(path_val)
-    print("finish reading dataset!")  # noqa: WPS421
+    print("finish reading dataset!")
 
     # options for dataset
     dataset_options = {
@@ -43,7 +43,7 @@ def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
         "y_dim": 1,
     }
 
-    print("start tensor dataset preparation!")  # noqa: WPS421
+    print("start tensor dataset preparation!")
     dataloader_train = preprocess(
         photo_z_train,
         dataset_options["batch_size"],
@@ -60,9 +60,9 @@ def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
         dataset_options["x_dim"],
         dataset_options["y_dim"],
     )
-    print("finish tensor dataset preparation!")  # noqa: WPS421
+    print("finish tensor dataset preparation!")
 
-    ###### Construct Network # noqa: E266
+    ###### Construct Network
     # options for network
     network_options = {
         "hidden_dim": 256,
@@ -91,7 +91,7 @@ def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
         network_options["loss_fcn"],
     )
 
-    ###### Start Train # noqa: E266
+    ###### Start Train
     # Pick output directory.
     outdir = network_options["outdir"]
     os.makedirs(outdir, exist_ok=True)
@@ -109,7 +109,7 @@ def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
     logger = TensorBoardLogger(save_dir=run_dir, name="tensorboard_logs")
 
     # train
-    print("start training")  # noqa: WPS421
+    print("start training")
     if resume is not None:
         reg = reg.load_from_checkpoint(resume)
         # Set the model to training mode
@@ -132,7 +132,7 @@ def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
         val_check_interval=network_options["val_check_interval"],
     )
     trainer.fit(model=reg, train_dataloaders=dataloader_train, val_dataloaders=dataloader_val)
-    print("finish training!")  # noqa: WPS421
+    print("finish training!")
 
 
 def preprocess(

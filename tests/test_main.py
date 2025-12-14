@@ -8,12 +8,7 @@ import torch
 from bliss.main import generate, predict, train
 from bliss.surveys.des import DarkEnergySurvey as DES
 
-
-@pytest.fixture(autouse=True)
-def patch_align(monkeypatch):
-    # align is quite slow, so we replace it with the identity function
-    identity = lambda x, *_args, **_kwargs: x
-    monkeypatch.setattr("bliss.surveys.survey.align", identity)
+pytestmark = pytest.mark.usefixtures("patch_align")
 
 
 class TestGenerate:
@@ -23,30 +18,31 @@ class TestGenerate:
 
         generate(cfg.generate)
 
-        file_path = f"{cfg.generate.cached_data_path}/dataset_0_size_2.pt"
+        expected_size = cfg.generate.n_batches_per_file * cfg.generate.prior.batch_size
+        file_path = f"{cfg.generate.cached_data_path}/dataset_0_size_{expected_size}.pt"
         assert os.path.exists(file_path), f"{file_path} not found"
 
         # cursory check of contents of cached dataset
         with open(file_path, "rb") as f:
             cached_dataset = torch.load(f, weights_only=False)
             assert isinstance(cached_dataset, list), "cached_dataset must be a list"
-            assert isinstance(
-                cached_dataset[0], dict
-            ), "cached_dataset must be a list of dictionaries"
-            assert isinstance(
-                cached_dataset[0]["tile_catalog"], dict
-            ), "cached_dataset[0]['tile_catalog'] must be a dictionary"
-            assert isinstance(
-                cached_dataset[0]["images"], torch.Tensor
-            ), "cached_dataset[0]['images'] must be a torch.Tensor"
+            assert isinstance(cached_dataset[0], dict), (
+                "cached_dataset must be a list of dictionaries"
+            )
+            assert isinstance(cached_dataset[0]["tile_catalog"], dict), (
+                "cached_dataset[0]['tile_catalog'] must be a dictionary"
+            )
+            assert isinstance(cached_dataset[0]["images"], torch.Tensor), (
+                "cached_dataset[0]['images'] must be a torch.Tensor"
+            )
             correct_len = cfg.generate.n_batches_per_file * cfg.generate.prior.batch_size
             assert len(cached_dataset) == correct_len, (
                 f"cached_dataset has length {len(cached_dataset)}, "
                 f"but must be list of length {correct_len}"
             )
-            assert (
-                len(cached_dataset[0]["images"]) == 5
-            ), "cached_dataset[0]['images'] must be a 5-D tensor"
+            assert len(cached_dataset[0]["images"]) == 5, (
+                "cached_dataset[0]['images'] must be a 5-D tensor"
+            )
             assert cached_dataset[0]["images"][0].shape == (
                 cfg.prior.n_tiles_h * cfg.decoder.tile_slen,
                 cfg.prior.n_tiles_w * cfg.decoder.tile_slen,
@@ -54,10 +50,12 @@ class TestGenerate:
 
 
 class TestTrain:
+    @pytest.mark.run_first
     def test_train_sdss(self, cfg, tmp_path):
         generate(cfg.generate)
         train(cfg.train)
 
+    @pytest.mark.run_first
     def test_train_des(self, cfg, tmp_path):
         cfg.decoder.survey = "${surveys.des}"
         cfg.decoder.with_dither = False

@@ -226,7 +226,6 @@ class Discretized1D(Distribution):
 
         return risk
 
-    # noqa: WPS223
     def get_lowest_risk_bin(self, risk_type="redshift_outlier_fraction_catastrophic_bin"):
         RISK_FUNCTIONS = {
             "redshift_outlier_fraction_catastrophic_bin_mag": self.compute_catastrophic_risk,
@@ -462,10 +461,7 @@ class BSpline1D(Distribution):
             res = x1 + (p - y1) * (x2 - x1) / (y2 - y1)
             quantiles.append(res)
 
-        if len(quantiles) == 1:
-            quantiles = quantiles[0]
-        else:
-            quantiles = torch.stack(quantiles, dim=0)
+        quantiles = quantiles[0] if len(quantiles) == 1 else torch.stack(quantiles, dim=0)
         return quantiles
 
 
@@ -602,10 +598,7 @@ class MixtureOfGaussians1D(Distribution):
             res = x1 + (p - y1) * (x2 - x1) / (y2 - y1)
             quantiles.append(res)
 
-        if len(quantiles) == 1:
-            quantiles = quantiles[0]
-        else:
-            quantiles = torch.stack(quantiles, dim=0)
+        quantiles = quantiles[0] if len(quantiles) == 1 else torch.stack(quantiles, dim=0)
         return quantiles
 
 

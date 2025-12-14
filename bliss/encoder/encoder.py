@@ -89,7 +89,7 @@ class Encoder(pl.LightningModule):
         # Generate all binary combinations for n^2 elements
         n = 2
         binary_combinations = list(itertools.product([0, 1], repeat=n * n))
-        mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)  # noqa: WPS114
+        mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)
         self.register_buffer("mask_patterns", mask_patterns)
 
         self.initialize_networks()
@@ -265,7 +265,7 @@ class Encoder(pl.LightningModule):
         x_features = self.get_features(batch)
         loss = torch.zeros_like(x_features[:, 0, :, :])
 
-        for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
+        for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns, strict=True):
             history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
             x_color_context = self.make_color_context(target_cat, history_mask)
             x_features_color = torch.cat((x_features, x_color_context), dim=1)

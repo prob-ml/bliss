@@ -4,6 +4,18 @@ import pytest
 from hydra import compose, initialize
 
 
+def pytest_collection_modifyitems(items):
+    """Reorder tests so run_first tests run before others."""
+    run_first_tests = []
+    other_tests = []
+    for item in items:
+        if item.get_closest_marker("run_first"):
+            run_first_tests.append(item)
+        else:
+            other_tests.append(item)
+    items[:] = run_first_tests + other_tests
+
+
 # command line arguments for tests
 def pytest_addoption(parser):
     parser.addoption(
@@ -12,6 +24,13 @@ def pytest_addoption(parser):
         default=False,
         help="Run tests using gpu.",
     )
+
+
+@pytest.fixture
+def patch_align(monkeypatch):
+    """Patch align function with identity to speed up tests."""
+    identity = lambda x, *_args, **_kwargs: x
+    monkeypatch.setattr("bliss.surveys.survey.align", identity)
 
 
 @pytest.fixture(scope="function")

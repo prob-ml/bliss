@@ -12,14 +12,14 @@ class RotateFlipTransform(torch.nn.Module):
 
         # apply rotation
         if rotate_id is None:
-            rotate_id = random.randint(0, 4)
+            rotate_id = random.randint(0, 4)  # noqa: S311
         datum_out["images"] = datum["images"].rot90(rotate_id, [1, 2])
         d = datum["tile_catalog"]
         datum_out["tile_catalog"] = {k: v.rot90(rotate_id, [0, 1]) for k, v in d.items()}
 
         # apply flip
         if do_flip is None:
-            do_flip = random.choice([True, False])
+            do_flip = random.choice([True, False])  # noqa: S311
         if do_flip:
             datum_out["images"] = datum_out["images"].flip([1])
             for k, v in datum_out["tile_catalog"].items():
@@ -51,9 +51,9 @@ class RandomShiftTransform(torch.nn.Module):
         shift_ub = self.tile_slen // 2
         shift_lb = -(shift_ub - 1)
         if vertical_shift is None:
-            vertical_shift = random.randint(shift_lb, shift_ub)
+            vertical_shift = random.randint(shift_lb, shift_ub)  # noqa: S311
         if horizontal_shift is None:
-            horizontal_shift = random.randint(shift_lb, shift_ub)
+            horizontal_shift = random.randint(shift_lb, shift_ub)  # noqa: S311
 
         img = datum["images"]
         img = torch.roll(img, shifts=vertical_shift, dims=1)

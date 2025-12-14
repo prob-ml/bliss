@@ -1,5 +1,7 @@
+import functools
 import logging
 import math
+import operator
 import os
 import pathlib
 import random
@@ -191,11 +193,12 @@ class ChunkingDataset(Dataset):
                 epoch_seed,
             )
             right_shift_list = [0, *accumulated_file_sizes_list[:-1]]
-            for start, end in zip(right_shift_list, accumulated_file_sizes_list):
-                output_list.append(random.Random(epoch_seed).sample(range(start, end), end - start))
-            random.Random(epoch_seed).shuffle(output_list)
+            for start, end in zip(right_shift_list, accumulated_file_sizes_list, strict=True):
+                rng = random.Random(epoch_seed)  # noqa: S311
+                output_list.append(rng.sample(range(start, end), end - start))
+            random.Random(epoch_seed).shuffle(output_list)  # noqa: S311
             # flatten the list
-            return sum(output_list, [])
+            return functools.reduce(operator.iadd, output_list, [])
 
         return list(range(0, len(self)))
 
@@ -230,7 +233,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.test_dataset = None
         self.predict_dataset = None
 
-    def setup(self, stage: str) -> None:  # noqa: WPS324
+    def setup(self, stage: str) -> None:
         if self.file_paths is None or self.slices is None:
             self._load_file_paths_and_slices()
 

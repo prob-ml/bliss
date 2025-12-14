@@ -294,7 +294,7 @@ class LensingDC2DataModule(DC2DataModule):
 
         data_to_cache = unpack_dict(data_splits)
 
-        for i in range(self.n_image_split**2):  # noqa: WPS426
+        for i in range(self.n_image_split**2):
             cached_data_file_name = f"cached_data_{image_index:04d}_{i:04d}_size_1.pt"
             tmp = data_to_cache[i]
             tmp_clone = map_nested_dicts(

@@ -1,4 +1,3 @@
-# flake8: noqa: WPS348
 from typing import List, Union
 
 import torch
@@ -71,7 +70,7 @@ class RedshiftMeanSquaredError(Metric):
             self.sum_squared_error += red_err
 
     def compute(self):
-        print(f"total num of pts: {self.total}")  # noqa: WPS421
+        print(f"total num of pts: {self.total}")
         mse = self.sum_squared_error / self.total
         return {"redshifts/mse": mse.item()}
 
@@ -99,7 +98,7 @@ class RedshiftMeanNLL(Metric):
             self.sum_nll += this_nll_sum
 
     def compute(self):
-        print(f"total num of pts: {self.total}")  # noqa: WPS421
+        print(f"total num of pts: {self.total}")
         avg_nll = self.sum_nll / self.total
         return {"redshifts/nll_avg": avg_nll.item()}
 

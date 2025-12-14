@@ -73,7 +73,7 @@ class RedshiftDC2DataModule(DC2DataModule):
             if any(substring in file_name for substring in test_tract_patches)
         ]
 
-    def setup(self, stage: str) -> None:  # noqa: WPS324
+    def setup(self, stage: str) -> None:
         """Setup following super(), but we save train/val/test splits to text files for ease."""
         if self.file_paths is None or self.slices is None:
             self._load_file_paths_and_slices()
@@ -131,7 +131,7 @@ class RedshiftDC2DataModule(DC2DataModule):
 
         return n_image
 
-    def prepare_data(self):  # noqa: WPS324
+    def prepare_data(self):
         if self.cached_data_path.exists():
             logger = logging.getLogger("DC2DataModule")
             warning_msg = "WARNING: cached data already exists at [%s], we directly use it\n"
@@ -191,10 +191,9 @@ class RedshiftDC2DataModule(DC2DataModule):
             sub_list_len=self.data_in_one_cached_file,
         )
 
-        data_count = 0
-        for sub_splits in data_splits:  # noqa: WPS426
+        for data_count, sub_splits in enumerate(data_splits):
             tmp_data_cached = []
-            for split in sub_splits:  # noqa: WPS426
+            for split in sub_splits:
                 split_clone = map_nested_dicts(
                     split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
                 )
@@ -208,4 +207,3 @@ class RedshiftDC2DataModule(DC2DataModule):
             cached_data_file_path = self.cached_data_path / cached_data_file_name
             with open(cached_data_file_path, "wb") as cached_data_file:
                 torch.save(tmp_data_cached, cached_data_file)
-            data_count += 1

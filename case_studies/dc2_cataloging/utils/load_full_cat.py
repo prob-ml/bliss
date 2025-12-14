@@ -13,7 +13,7 @@ from case_studies.dc2_cataloging.utils.load_lsst import get_lsst_full_cat
 
 def concatenate_tile_dicts(tile_dict_list):
     output_tile_cat_dict = {}
-    for k in tile_dict_list[0].keys():
+    for k in tile_dict_list[0]:
         if k not in output_tile_cat_dict:
             output_tile_cat_dict[k] = []
         for tile_dict in tile_dict_list:

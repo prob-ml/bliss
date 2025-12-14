@@ -136,7 +136,7 @@ def predict(predict_cfg):
     trainer = instantiate(predict_cfg.trainer)
     enc_output = trainer.predict(encoder, datamodule=dataset)
 
-    return dict(zip(dataset.image_ids(), enc_output))
+    return dict(zip(dataset.image_ids(), enc_output, strict=True))
 
 
 # pragma: no cover

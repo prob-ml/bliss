@@ -32,9 +32,9 @@ def split_as_train_val(
 @click.option("--outname", type=str)
 def main(source, outname):
     path = source
-    print("reading dataset")  # noqa: WPS421
+    print("reading dataset")
     df = pd.read_pickle(path)
-    print("spliting dataset")  # noqa: WPS421
+    print("spliting dataset")
     train_set, val_set, test_set = split_as_train_val(df, test_size=0.2, random_state=42)
     train_set.reset_index(drop=True, inplace=True)
     val_set.reset_index(drop=True, inplace=True)
@@ -46,7 +46,7 @@ def main(source, outname):
     train_set.to_pickle(train_path)
     val_set.to_pickle(val_path)
     test_set.to_pickle(test_path)
-    print("saving training and validation dataset")  # noqa: WPS421
+    print("saving training and validation dataset")
 
 
 if __name__ == "__main__":
