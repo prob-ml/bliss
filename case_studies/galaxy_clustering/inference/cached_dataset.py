@@ -64,9 +64,9 @@ class DESDataset(Dataset):
 
     def _build_image(self, directory_path):
         dir_files = {
-            band: [
+            band: next(
                 f for f in os.listdir(f"{directory_path}") if f.endswith(f"{band}_nobkg.fits.fz")
-            ][0]
+            )
             for band in DES_BANDS
         }
         image_bands = []

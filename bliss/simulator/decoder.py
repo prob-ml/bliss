@@ -28,7 +28,6 @@ class Decoder(nn.Module):
             with_dither: if True, apply random pixel shifts to the images and align them
             with_noise: if True, add Poisson noise to the image pixels
         """
-
         super().__init__()
 
         self.tile_slen = tile_slen
@@ -71,14 +70,16 @@ class Decoder(nn.Module):
 
         components = []
         if disk_flux > 0:
-            b_d = source_params["galaxy_a_d"] * source_params["galaxy_disk_q"]
-            disk_hlr_arcsecs = np.sqrt(source_params["galaxy_a_d"] * b_d)
+            a_d = source_params["galaxy_a_d"].item()
+            b_d = a_d * source_params["galaxy_disk_q"].item()
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
             disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs)
             sheared_disk = disk.shear(q=source_params["galaxy_disk_q"].item(), beta=beta)
             components.append(sheared_disk)
         if bulge_flux > 0:
-            b_b = source_params["galaxy_a_b"] * source_params["galaxy_bulge_q"]
-            bulge_hlr_arcsecs = np.sqrt(source_params["galaxy_a_b"] * b_b)
+            a_b = source_params["galaxy_a_b"].item()
+            b_b = a_b * source_params["galaxy_bulge_q"].item()
+            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
             bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
             sheared_bulge = bulge.shear(q=source_params["galaxy_bulge_q"].item(), beta=beta)
             components.append(sheared_bulge)
@@ -108,6 +109,7 @@ class Decoder(nn.Module):
 
     def pixel_shifts(self):
         """Generate random pixel shifts and corresponding WCS list.
+
         This function generates `n_shifts` random pixel shifts `shifts` and corresponding WCS list
         `wcs` to undo these shifts, relative to `wcs[ref_band]`.
 
@@ -174,7 +176,8 @@ class Decoder(nn.Module):
         # use the specified flux_calibration ratios indexed by image_id
         avg_nelec_conv = np.mean(frame["flux_calibration"], axis=-1)
         if n_sources > 0:
-            full_cat["fluxes"] *= rearrange(avg_nelec_conv, "bands -> 1 1 bands")
+            avg_nelec_conv_tensor = torch.from_numpy(avg_nelec_conv).float()
+            full_cat["fluxes"] *= rearrange(avg_nelec_conv_tensor, "bands -> 1 1 bands")
 
         # generate random WCS shifts as manual image dithering via unaligning WCS
         if self.with_dither:

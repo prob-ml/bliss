@@ -28,15 +28,14 @@ BLISS is pip installable with the following command:
 pip install bliss-toolkit
 ```
 
-The required dependencies are listed in the `[tool.poetry.dependencies]` block of the `pyproject.toml` file.
+The required dependencies are listed in the `[project]` block of the `pyproject.toml` file.
 
 # Installation (Developers)
 
-1. Install [poetry](https://python-poetry.org/docs/):
+1. Install [uv](https://docs.astral.sh/uv/):
 
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
-poetry config virtualenvs.in-project true
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 2. Install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
@@ -57,11 +56,11 @@ git-lfs install
 git clone git@github.com:prob-ml/bliss.git
 ```
 
-5. To create a poetry environment with the `bliss` dependencies satisfied, run
+5. To create a virtual environment with the `bliss` dependencies satisfied, run
 
 ```bash
 cd bliss
-poetry install
+uv sync --all-extras
 ```
 
 6. Activate the virtual environment:

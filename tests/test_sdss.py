@@ -5,13 +5,7 @@ import pytest
 from hydra.utils import instantiate
 
 
-@pytest.fixture(autouse=True)
-def patch_align(monkeypatch):
-    # align is quite slow, so we replace it with the identity function
-    identity = lambda x, *_args, **_kwargs: x
-    monkeypatch.setattr("bliss.surveys.survey.align", identity)
-
-
+@pytest.mark.usefixtures("patch_align")
 class TestSDSS:
     def test_sdss(self, cfg):
         cfg.surveys.sdss.fields = [{"run": 3900, "camcol": 6, "fields": [269]}]

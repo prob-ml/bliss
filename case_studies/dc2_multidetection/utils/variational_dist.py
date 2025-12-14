@@ -60,9 +60,7 @@ class FastOne2OneAssigner(DistAssigner):
         match1cond2 = torch.gather(match1, 1, match2)  # (B, m)
         pos_tensor = torch.arange(
             0, m, dtype=est_to_true_indices.dtype, device=est_to_true_indices.device
-        ).view(
-            1, -1
-        )  # (1, m)
+        ).view(1, -1)  # (1, m)
         one_to_one_match = (match1cond2 == pos_tensor).unsqueeze(-1)  # (B, m, 1)
         est_on_mask_num = rearrange(est_is_on_mask, "b nth ntw m 1 -> (b nth ntw) m").sum(
             dim=-1, keepdim=True
@@ -83,9 +81,7 @@ class FastOne2OneAssigner(DistAssigner):
             dim=-1,
             index=est_to_true_indices[..., 0],
             src=est_to_true_indices[..., 1],
-        )[:, :-1].unsqueeze(
-            -1
-        )  # (B, m, 1)
+        )[:, :-1].unsqueeze(-1)  # (B, m, 1)
 
     def __call__(self, est_tile_cat: TileCatalog, true_tile_cat: TileCatalog, topk: int):
         locs_distance = self._get_dist_matrix(est_tile_cat, true_tile_cat)
@@ -125,10 +121,9 @@ class TaskAlignedAssigner(PartialDistAssigner):
         est_to_true_locs_dist, true_mask = cls._get_partial_dist_matrix(
             est_tile_cat, true_tile_cat
         )  # (B, m, m), (B, 1, m)
-        true_to_est_locs_dist, true_mask = est_to_true_locs_dist.permute(
-            0, 2, 1
-        ), true_mask.permute(
-            0, 2, 1
+        true_to_est_locs_dist, true_mask = (
+            est_to_true_locs_dist.permute(0, 2, 1),
+            true_mask.permute(0, 2, 1),
         )  # (B, m, m), (B, m, 1)
         assert topk <= true_to_est_locs_dist.shape[-1]
         _, true_to_est_topk_indices = torch.topk(

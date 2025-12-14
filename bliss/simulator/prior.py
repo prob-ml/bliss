@@ -151,9 +151,9 @@ class CatalogPrior(pl.LightningModule):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             with open(self.star_color_model_path, "rb") as f:
-                gmm_star = pickle.load(f)
+                gmm_star = pickle.load(f)  # noqa: S301
             with open(self.gal_color_model_path, "rb") as f:
-                gmm_gal = pickle.load(f)
+                gmm_gal = pickle.load(f)  # noqa: S301
         return gmm_star, gmm_gal
 
     def _sample_flux_ratios(self, gmm) -> Tuple[Tensor, Tensor]:
@@ -185,6 +185,7 @@ class CatalogPrior(pl.LightningModule):
         flux_ratio = np.exp(flux_logdiff)
 
         # Computes the flux in each band as a proportion of the reference band flux
+        flux_ratio = torch.from_numpy(flux_ratio).float()
         flux_prop = torch.ones(flux_logdiff.shape[0], self.n_bands)
         for band in range(self.reference_band - 1, -1, -1):
             flux_prop[:, band] = flux_prop[:, band + 1] / flux_ratio[:, band]
@@ -192,7 +193,7 @@ class CatalogPrior(pl.LightningModule):
             flux_prop[:, band] = flux_prop[:, band - 1] * flux_ratio[:, band - 1]
 
         # Reshape drawn values into appropriate form
-        sample_dims = sample_dims + (self.n_bands,)
+        sample_dims = (*sample_dims, self.n_bands)
         return flux_prop.view(sample_dims)
 
     def _sample_galaxy_shape(self) -> Tuple[Tensor, Tensor]:

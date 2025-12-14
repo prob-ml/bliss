@@ -33,7 +33,6 @@ def convert_flux_to_magnitude(flux, zero_point):
     Returns:
         Tensor indicating fluxes in magnitude
     """
-
     return -2.5 * torch.log10(flux / zero_point)
 
 
@@ -322,8 +321,10 @@ class TileCatalog(BaseTileCatalog):
                     pad = torch.zeros_like(val)[:, :, :, 0:1, :].expand(
                         -1, -1, -1, slicing_end - val.shape[-2], -1
                     )
-                    val = torch.cat((val, pad), dim=-2)
-                d[key] = val[:, :, :, slicing_start:slicing_end, :]
+                    padded_val = torch.cat((val, pad), dim=-2)
+                else:
+                    padded_val = val
+                d[key] = padded_val[:, :, :, slicing_start:slicing_end, :]
 
         return TileCatalog(d)
 
@@ -351,6 +352,7 @@ class TileCatalog(BaseTileCatalog):
 
     def union(self, other, disjoint=False):
         """Returns a new TileCatalog containing the union of the sources in self and other.
+
         The maximum number of sources in the returned catalog is the sum of the maximum number
         of sources in self and other if disjoint is false, otherwise it is unchanged.
 
@@ -390,9 +392,10 @@ class FullCatalog(UserDict):
     @staticmethod
     def plocs_from_ra_dec(ras, decs, wcs: WCS):
         """Converts RA/DEC coordinates into BLISS's pixel coordinates.
-            BLISS pixel coordinates have (0, 0) as the lower-left corner, whereas standard pixel
-            coordinates begin at (-0.5, -0.5). BLISS pixel coordinates are in row-column order,
-            whereas standard pixel coordinates are in column-row order.
+
+        BLISS pixel coordinates have (0, 0) as the lower-left corner, whereas standard pixel
+        coordinates begin at (-0.5, -0.5). BLISS pixel coordinates are in row-column order,
+        whereas standard pixel coordinates are in column-row order.
 
         Args:
             ras (Tensor): (b, n) tensor of RA coordinates in degrees.
@@ -626,9 +629,9 @@ class FullCatalog(UserDict):
             tile_params["n_sources"] = tile_n_sources
             return TileCatalog(tile_params)
         if not filter_oob:
-            assert torch.masked_select(
-                plocs_mask, mask=is_on_mask
-            ).all(), "find sources that are outside boundary"
+            assert torch.masked_select(plocs_mask, mask=is_on_mask).all(), (
+                "find sources that are outside boundary"
+            )
         # prepare plocs mask #
 
         # for each source, find how many sources share the same tile with it #
@@ -665,9 +668,7 @@ class FullCatalog(UserDict):
         max_shared_tiles = num_shared_tiles_per_source.max().item()
         if max_shared_tiles > max_sources_per_tile:
             if not ignore_extra_sources:
-                raise ValueError(  # noqa: WPS220
-                    "# of sources per tile exceeds `max_sources_per_tile`."
-                )
+                raise ValueError("# of sources per tile exceeds `max_sources_per_tile`.")
 
             for tile_k, tile_v in tile_params.items():
                 tile_params[tile_k] = self._pad_along_max_sources(tile_v, target_m=max_shared_tiles)

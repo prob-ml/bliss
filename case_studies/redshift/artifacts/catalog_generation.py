@@ -40,8 +40,17 @@ tracts = [3828, 3829]
 bands_truth = [f"mag_{band}" for band in "ugrizy"]
 truth_df = pd.DataFrame(
     truth_cat.get_quantities(
-        bands_truth
-        + ["id", "ra", "dec", "redshift", "tract", "patch", "cosmodc2_id", "truth_type"],
+        [
+            *bands_truth,
+            "id",
+            "ra",
+            "dec",
+            "redshift",
+            "tract",
+            "patch",
+            "cosmodc2_id",
+            "truth_type",
+        ],
         native_filters=[tract_filter(tracts)],
     )
 )
@@ -99,7 +108,7 @@ truth_id_counts = truth_df["id"].value_counts()
 if not all(truth_id_counts == 1):
     raise ValueError(
         f"Some truth IDs appear multiple times in truth_df. IDs appearing multiple times: "
-        f"{str(truth_id_counts[truth_id_counts > 1])}"
+        f"{truth_id_counts[truth_id_counts > 1]!s}"
     )
 
 # Also verify all match_df truth IDs exist in truth_df
@@ -140,7 +149,7 @@ for column in df.columns:
     if df[column].dtype == "object":
         raise ValueError(f"Column {column} has dtype 'object' despite attempt to coerce.")
     if pd.api.types.is_string_dtype(df[column]):
-        logging.info(f"Column {column} has 'string' dtype {str(df[column].dtype)}")
+        logging.info(f"Column {column} has 'string' dtype {df[column].dtype!s}")
 
 
 ##########################
@@ -171,17 +180,18 @@ with fits.open(rawfn) as hdul:
 
 # Get the RA/Dec of pixel (100, 100)
 pixel_coords = [100, 100]
-ra_dec_BR = wcs.pixel_to_world(pixel_coords[0], pixel_coords[1])
+ra_dec_br = wcs.pixel_to_world(pixel_coords[0], pixel_coords[1])
 
 # Get the RA/Dec of pixel (0, 0)
 pixel_coords = [0, 0]
-ra_dec_TL = wcs.pixel_to_world(pixel_coords[0], pixel_coords[1])
+ra_dec_tl = wcs.pixel_to_world(pixel_coords[0], pixel_coords[1])
 
 # identify values of df where the ra/dec is between these two points
 # Define the region of interest (ROI) using the RA/Dec bounds
-ra_min, ra_max = min(ra_dec_TL.ra.deg, ra_dec_BR.ra.deg), max(ra_dec_TL.ra.deg, ra_dec_BR.ra.deg)
-dec_min, dec_max = min(ra_dec_TL.dec.deg, ra_dec_BR.dec.deg), max(
-    ra_dec_TL.dec.deg, ra_dec_BR.dec.deg
+ra_min, ra_max = min(ra_dec_tl.ra.deg, ra_dec_br.ra.deg), max(ra_dec_tl.ra.deg, ra_dec_br.ra.deg)
+dec_min, dec_max = (
+    min(ra_dec_tl.dec.deg, ra_dec_br.dec.deg),
+    max(ra_dec_tl.dec.deg, ra_dec_br.dec.deg),
 )
 
 # Filter the dataframe for objects within the ROI

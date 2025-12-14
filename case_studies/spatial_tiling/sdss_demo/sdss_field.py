@@ -48,7 +48,7 @@ with initialize(config_path=".", version_base=None):
 # %%
 sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
 sdss.prepare_data()
-(sdss_frame,) = sdss.predict_dataloader()  # noqa: WPS460
+(sdss_frame,) = sdss.predict_dataloader()
 obs_image = sdss_frame["images"][0]
 
 # %%
@@ -283,7 +283,6 @@ ax.legend(
     fontsize=10,
 )
 
-# flake8: noqa: WPS421
 for k, v in matches.items():
     print(k, len(v))
 # %%
