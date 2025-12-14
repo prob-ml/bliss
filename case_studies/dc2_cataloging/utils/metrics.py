@@ -209,13 +209,14 @@ class ShearMSE(FluxBinMetricWithFilter):
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            assert len(tcat_matches) == len(
-                ecat_matches
-            ), "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), (
+                "tcat_matches and ecat_matches should be of the same size"
+            )
             if tcat_matches.shape[0] == 0 or ecat_matches.shape[0] == 0:
                 continue
-            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
-                device=self.device
+            tcat_matches, ecat_matches = (
+                tcat_matches.to(device=self.device),
+                ecat_matches.to(device=self.device),
             )
             tcat_matches_filter = true_filter_bools[i][tcat_matches]
             tcat_matches = tcat_matches[tcat_matches_filter]
@@ -295,13 +296,14 @@ class EllipticityMSE(FluxBinMetricWithFilter):
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            assert len(tcat_matches) == len(
-                ecat_matches
-            ), "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), (
+                "tcat_matches and ecat_matches should be of the same size"
+            )
             if tcat_matches.shape[0] == 0 or ecat_matches.shape[0] == 0:
                 continue
-            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
-                device=self.device
+            tcat_matches, ecat_matches = (
+                tcat_matches.to(device=self.device),
+                ecat_matches.to(device=self.device),
             )
             tcat_matches_filter = true_filter_bools[i][tcat_matches]
             tcat_matches = tcat_matches[tcat_matches_filter]
@@ -394,13 +396,14 @@ class EllipticityResidual(FluxBinMetricWithFilter):
         self.g2_residual.zero_()
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            assert len(tcat_matches) == len(
-                ecat_matches
-            ), "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), (
+                "tcat_matches and ecat_matches should be of the same size"
+            )
             if tcat_matches.shape[0] == 0 or ecat_matches.shape[0] == 0:
                 continue
-            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
-                device=self.device
+            tcat_matches, ecat_matches = (
+                tcat_matches.to(device=self.device),
+                ecat_matches.to(device=self.device),
             )
             tcat_matches_filter = true_filter_bools[i][tcat_matches]
             tcat_matches = tcat_matches[tcat_matches_filter]
@@ -498,13 +501,14 @@ class EllipticityResidualwrtBlendedness(GeneralBinMetricWithFilter):
         self.g2_residual.zero_()
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            assert len(tcat_matches) == len(
-                ecat_matches
-            ), "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), (
+                "tcat_matches and ecat_matches should be of the same size"
+            )
             if tcat_matches.shape[0] == 0 or ecat_matches.shape[0] == 0:
                 continue
-            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
-                device=self.device
+            tcat_matches, ecat_matches = (
+                tcat_matches.to(device=self.device),
+                ecat_matches.to(device=self.device),
             )
             tcat_matches_filter = true_filter_bools[i][tcat_matches]
             tcat_matches = tcat_matches[tcat_matches_filter]

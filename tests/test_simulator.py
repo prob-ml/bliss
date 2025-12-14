@@ -24,7 +24,9 @@ class TestSimulate:
     def test_simulate_and_predict(self, cfg):
         """Test simulating an image from a fixed catalog and making predictions on that catalog."""
         # load cached simulated catalog
-        true_catalog = torch.load(f"{cfg.paths.test_data}/test_image/dataset_0.pt")
+        true_catalog = torch.load(
+            f"{cfg.paths.test_data}/test_image/dataset_0.pt", weights_only=False
+        )
         true_catalog["fluxes"][0, 10, 10] = 10.0
         true_catalog = TileCatalog(true_catalog)
 
@@ -42,7 +44,9 @@ class TestSimulate:
         sdss = MockSDSS(image, psf_params)
 
         encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-        enc_state_dict = torch.load(cfg.predict.weight_save_path, map_location=cfg.predict.device)
+        enc_state_dict = torch.load(
+            cfg.predict.weight_save_path, map_location=cfg.predict.device, weights_only=False
+        )
         encoder.load_state_dict(enc_state_dict)
         encoder.eval()
 
@@ -64,7 +68,7 @@ class TestSimulate:
 
     def test_render_images(self, cfg):
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
-            test_cat = torch.load(f)
+            test_cat = torch.load(f, weights_only=False)
 
         true_tile_cat = TileCatalog(test_cat).to("cpu")
 

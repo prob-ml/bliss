@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import torch
 from hydra.utils import instantiate
 from torch.utils.data import DataLoader
@@ -109,7 +110,7 @@ class TestMetrics:
     def test_self_agreement(self, cfg):
         """Test galaxy classification metrics on full catalog."""
         with open(f"{cfg.paths.test_data}/multiband_data/dataset_0.pt", "rb") as f:
-            data = torch.load(f)
+            data = torch.load(f, weights_only=False)
         multiband_dataloader = DataLoader(data, batch_size=8, shuffle=False)
 
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
@@ -135,6 +136,7 @@ class TestMetrics:
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0
 
+    @pytest.mark.run_first
     def test_photo_decals_catalogs_matches(self, cfg):
         """Compares catalogs as safety check for metrics."""
         sdss = instantiate(cfg.surveys.sdss, load_image_data=False)

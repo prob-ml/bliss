@@ -10,17 +10,17 @@ Bayesian Light Source Separator (BLISS)
 
 # Introduction
 
-BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides
-  - __Accurate estimation__ of parameters in blended field.
-  - __Calibrated uncertainties__ through fitting an approximate Bayesian posterior.
-  - __Scalability__ of Bayesian inference to entire astronomical surveys.
+BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides:
+  - __Accurate estimation__ of parameters in crowded fields with overlapping sources
+  - __Calibrated uncertainties__ through fully Bayesian inference via neural posterior estimation (NPE)
+  - __Scalability__ to petabyte-scale surveys containing billions of celestial objects
 
-BLISS uses state-of-the-art variational inference techniques including
-  - __Amortized inference__, in which a neural network maps telescope images to an approximate Bayesian posterior on parameters of interest.
-  - __Variational auto-encoders__ (VAEs) to fit a flexible model for galaxy morphology and deblend galaxies.
-  - __Wake-sleep algorithm__ to jointly fit the approximate posterior and model parameters such as the PSF and the galaxy VAE.
+BLISS uses neural posterior estimation (NPE), a form of simulation-based inference in which a neural network maps telescope images directly to an approximate Bayesian posterior. BLISS uses autoregressive tiling with checkerboard patterns that align the variational distribution's conditional dependencies with the true posterior, improving calibration.
+BLISS systematically outperforms standard survey pipelines for light source detection, flux measurement, star/galaxy classification, and galaxy shape measurement.
 
 # Installation
+
+**Requirements:** Python 3.12 or higher
 
 BLISS is pip installable with the following command:
 
@@ -28,13 +28,17 @@ BLISS is pip installable with the following command:
 pip install bliss-toolkit
 ```
 
-and the required dependencies are listed in the ``[tool.poetry.dependencies]`` block of the ``pyproject.toml`` file.
+The required dependencies are listed in the `[project]` block of the `pyproject.toml` file.
 
 # Installation (Developers)
 
-1. To use and install `bliss` you first need to install [poetry](https://python-poetry.org/docs/).
+1. Install [uv](https://docs.astral.sh/uv/):
 
-2. Then, install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
 
 ```bash
 sudo apt-get install libfftw3-dev
@@ -52,43 +56,70 @@ git-lfs install
 git clone git@github.com:prob-ml/bliss.git
 ```
 
-5. To create a poetry environment with the `bliss` dependencies satisified, run
+5. To create a virtual environment with the `bliss` dependencies satisfied, run
 
 ```bash
 cd bliss
-export POETRY_VIRTUALENVS_IN_PROJECT=1
-poetry install
-poetry shell
+uv sync --all-extras
 ```
 
-6. Verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
+6. Activate the virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+7. Verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
 
 ```bash
 pytest
 pytest --gpu
 ```
 
-7. Finally, if you are planning to contribute code to this repository, consider installing our pre-commit hooks so that your code commits will be checked locally for compliance with our coding conventions:
+8. Finally, if you are planning to contribute code to this repository, consider installing our pre-commit hooks so that your code commits will be checked locally for compliance with our coding conventions:
 
 ```bash
 pre-commit install
 ```
 
-# Latest updates
-## Galaxies
-   - BLISS now includes a galaxy model based on a VAE that was trained on Galsim galaxies.
-   - BLISS now includes an algorithm for detecting, measuring, and deblending galaxies.
+# Usage
 
-## Stars
-   - BLISS already includes the StarNet functionality from its predecessor repo: [DeblendingStarFields](https://github.com/Runjing-Liu120/DeblendingStarfields).
+BLISS provides a command-line interface powered by [Hydra](https://hydra.cc/) for configuration management. The basic usage pattern is:
 
+```bash
+bliss mode={generate,train,predict} [config options]
+```
+
+- `mode=generate` - Generate synthetic training data from the forward model
+- `mode=train` - Train encoder networks on simulated or real data
+- `mode=predict` - Run inference on astronomical images to produce catalogs
+
+Configuration files are located in `bliss/conf/` and can be composed and overridden via command line arguments.
+
+# Case Studies
+
+The `case_studies/` directory contains research applications of BLISS:
+
+- **weak_lensing/** - Shear (γ) and convergence (κ) estimation, validated on DC2 and DECaLS simulations
+- **redshift/** - Photo-z estimation (BLISS-PZ) with multiple variational families
+- **galaxy_clustering/** - Galaxy cluster detection and membership prediction, validated on DES DR2
+- **dc2_cataloging/** - Full cataloging pipeline for DC2 simulation
+- **strong_lensing/** - Strong gravitational lens detection
+- **spatial_tiling/** - Spatially autoregressive tiling for astronomical cataloging
+- **psf_variation/** - Spatially varying PSFs for astronomical cataloging
 
 # References
 
-Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. [Variational inference for deblending crowded starfields](https://www.jmlr.org/papers/volume24/21-0169/21-0169.pdf), Journal of Machine Learning Research. 2023
+Yicun Duan, Xinyue Li, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Collaboration. [Neural posterior estimation for cataloging astronomical images from the Legacy Survey of Space and Time](https://arxiv.org/abs/2510.15315). arXiv:2510.15315. 2025.
 
-Mallory Wang, Ismael Mendoza, Cheng Wang, Camille Avestruz, and Jeffrey Regier. [Statistical inference for coadded astronomical images.](https://ml4physicalsciences.github.io/2022/files/NeurIPS_ML4PS_2022_167.pdf). NeurIPS Workshop on Machine Learning and the Physical Sciences. 2022.
+Jeffrey Regier. [Neural posterior estimation with autoregressive tiling for detecting objects in astronomical images](https://arxiv.org/abs/2510.03074). arXiv:2510.03074. 2025.
 
-Yash Patel and Jeffrey Regier. [Scalable Bayesian inference for detecting strong gravitational lensing systems.](https://ml4physicalsciences.github.io/2022/files/NeurIPS_ML4PS_2022_155.pdf). NeurIPS Workshop on Machine Learning and the Physical Sciences. 2022.
+Aakash Patel, Tianqing Zhang, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Science Collaboration. [Neural posterior estimation for cataloging astronomical images with spatially varying backgrounds and point spread functions](https://iopscience.iop.org/article/10.3847/1538-3881/adef32). The Astronomical Journal. 2025.
+
+Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. [Variational inference for deblending crowded starfields](https://www.jmlr.org/papers/volume24/21-0169/21-0169.pdf). Journal of Machine Learning Research. 2023.
+
+Mallory Wang, Ismael Mendoza, Cheng Wang, Camille Avestruz, and Jeffrey Regier. [Statistical inference for coadded astronomical images](https://ml4physicalsciences.github.io/2022/files/NeurIPS_ML4PS_2022_167.pdf). NeurIPS Workshop on Machine Learning and the Physical Sciences. 2022.
+
+Yash Patel and Jeffrey Regier. [Scalable Bayesian inference for detecting strong gravitational lensing systems](https://ml4physicalsciences.github.io/2022/files/NeurIPS_ML4PS_2022_155.pdf). NeurIPS Workshop on Machine Learning and the Physical Sciences. 2022.
 
 Derek Hansen, Ismael Mendoza, Runjing Liu, Ziteng Pang, Zhe Zhao, Camille Avestruz, and Jeffrey Regier. [Scalable Bayesian inference for detection and deblending in astronomical images](https://ml4astro.github.io/icml2022/assets/27.pdf). ICML Workshop on Machine Learning for Astrophysics. 2022.

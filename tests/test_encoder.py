@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 class TestEncoder:
     def test_sample_multisource_catalog(self, cfg):
         with open(f"{cfg.paths.test_data}/test_multi_source.pt", "rb") as f:
-            data = torch.load(f)
+            data = torch.load(f, weights_only=False)
         multi_source_dataloader = DataLoader(data, batch_size=8, shuffle=False)
 
         batch = next(iter(multi_source_dataloader))
@@ -18,7 +18,7 @@ class TestEncoder:
 
     def test_sample_with_psf(self, cfg):
         with open(f"{cfg.paths.test_data}/multiband_data/dataset_0.pt", "rb") as f:
-            data = torch.load(f)
+            data = torch.load(f, weights_only=False)
         multiband_dataloader = DataLoader(data, batch_size=8, shuffle=False)
 
         batch = next(iter(multiband_dataloader))

@@ -1,9 +1,8 @@
-import logging
 from abc import ABC, abstractmethod
 
 import torch
 from einops import rearrange
-from torch.distributions import (  # noqa: WPS235
+from torch.distributions import (
     AffineTransform,
     Categorical,
     Distribution,
@@ -31,7 +30,7 @@ class VariationalDist(torch.nn.Module):
     def _factor_param_pairs(self, x_cat):
         split_sizes = [v.n_params for v in self.factors]
         dist_params_lst = torch.split(x_cat, split_sizes, 3)
-        return zip(self.factors, dist_params_lst)
+        return zip(self.factors, dist_params_lst, strict=True)
 
     def sample(self, x_cat, use_mode=False, return_base_cat=False):
         fp_pairs = self._factor_param_pairs(x_cat)
@@ -56,7 +55,7 @@ class NullGating(NllGating):
         tc_keys = true_tile_cat.keys()
         if "n_sources" in tc_keys:
             return torch.ones_like(true_tile_cat["n_sources"]).bool()
-        first = true_tile_cat[list(tc_keys)[0]]
+        first = true_tile_cat[next(iter(tc_keys))]
         return torch.ones(first.shape[:-1]).bool().to(first.device)
 
 
@@ -91,27 +90,7 @@ class VariationalFactor:
         self.n_params = n_params
         self.sample_rearrange = sample_rearrange
         self.nll_rearrange = nll_rearrange
-        if nll_gating is None:
-            self.nll_gating = NullGating()
-        elif isinstance(nll_gating, str):
-            self.nll_gating = self._get_nll_gating_instance(nll_gating)
-        elif issubclass(type(nll_gating), NllGating):
-            self.nll_gating = nll_gating
-        else:
-            raise TypeError("invalid nll_gating type")
-
-    # to be compatible with the old yaml files
-    def _get_nll_gating_instance(self, nll_gating: str):
-        logger = logging.getLogger("VariationalFactor")
-        warning_msg = "WARNING: please don't use str as nll_gating; it will be deprecated"
-        logger.warning(warning_msg)
-        if nll_gating == "n_sources":
-            return SourcesGating()
-        if nll_gating == "is_star":
-            return StarGating()
-        if nll_gating == "is_galaxy":
-            return GalaxyGating()
-        raise ValueError("invalide nll_gating string")
+        self.nll_gating = nll_gating if nll_gating is not None else NullGating()
 
     def sample(self, params, use_mode=False):
         qk = self.get_dist(params)
@@ -306,7 +285,6 @@ class TruncatedDiagonalMVN(Distribution):
         Distribution is "multivariate" in that the last dimension of mu and sigma
         are considered event dimensions.
         """
-
         super().__init__(validate_args=False)
         multiple_normals = Normal(mu, sigma)  # all dims are batch dims, none are event
         self.base_dist = Independent(multiple_normals, 1)  # now last dim is event dim
@@ -329,7 +307,6 @@ class TruncatedDiagonalMVN(Distribution):
             Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
 
         """
-
         shape = sample_shape + self.batch_shape + self.event_shape
 
         # draw using inverse cdf method

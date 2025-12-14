@@ -1,5 +1,7 @@
+import functools
 import logging
 import math
+import operator
 import os
 import pathlib
 import random
@@ -36,13 +38,11 @@ class FullCatalogToTileTransform(torch.nn.Module):
         datum_out = {k: v for k, v in datum_in.items() if k != "full_catalog"}
 
         h_pixels, w_pixels = datum_in["images"].shape[1:]
-        d1 = {k: v.unsqueeze(0) for k, v in datum_in["full_catalog"].items()}
-        full_cat = FullCatalog(h_pixels, w_pixels, d1)
+        full_cat = FullCatalog.from_dict(h_pixels, w_pixels, datum_in["full_catalog"])
         tile_cat = full_cat.to_tile_catalog(
             self.tile_slen, self.max_sources, filter_oob=self.filter_oob
-        ).data
-        d2 = {k: v.squeeze(0) for k, v in tile_cat.items()}
-        datum_out["tile_catalog"] = d2
+        )
+        datum_out["tile_catalog"] = tile_cat.to_dict()
 
         return datum_out
 
@@ -79,14 +79,12 @@ class FluxFilterTransform(torch.nn.Module):
     def __call__(self, datum_in):
         datum_out = copy(datum_in)
 
-        d1 = {k: v.unsqueeze(0) for k, v in datum_in["tile_catalog"].items()}
-        target_cat = TileCatalog(d1)
+        target_cat = TileCatalog.from_dict(datum_in["tile_catalog"])
         target_cat = target_cat.filter_by_flux(
             min_flux=self.min_flux,
             band=self.reference_band,
         )
-        d2 = {k: v.squeeze(0) for k, v in target_cat.items()}
-        datum_out["tile_catalog"] = d2
+        datum_out["tile_catalog"] = target_cat.to_dict()
 
         return datum_out
 
@@ -156,7 +154,7 @@ class ChunkingDataset(Dataset):
                     )
                     logger.warning(warning_msg)
                 with open(file_path, "rb") as f:
-                    cached_data_len = len(torch.load(f))
+                    cached_data_len = len(torch.load(f, weights_only=False))
 
             if i == 0:
                 self.accumulated_file_sizes[i] = cached_data_len
@@ -177,7 +175,7 @@ class ChunkingDataset(Dataset):
         if self.buffered_file_index != converted_index:
             self.buffered_file_index = converted_index
             with open(self.file_paths[converted_index], "rb") as f:
-                self.buffered_data = torch.load(f)
+                self.buffered_data = torch.load(f, weights_only=False)
         output_data = self.buffered_data[converted_sub_index]
         return self.transform(output_data)
 
@@ -195,11 +193,12 @@ class ChunkingDataset(Dataset):
                 epoch_seed,
             )
             right_shift_list = [0, *accumulated_file_sizes_list[:-1]]
-            for start, end in zip(right_shift_list, accumulated_file_sizes_list):
-                output_list.append(random.Random(epoch_seed).sample(range(start, end), end - start))
-            random.Random(epoch_seed).shuffle(output_list)
+            for start, end in zip(right_shift_list, accumulated_file_sizes_list, strict=True):
+                rng = random.Random(epoch_seed)  # noqa: S311
+                output_list.append(rng.sample(range(start, end), end - start))
+            random.Random(epoch_seed).shuffle(output_list)  # noqa: S311
             # flatten the list
-            return sum(output_list, [])
+            return functools.reduce(operator.iadd, output_list, [])
 
         return list(range(0, len(self)))
 
@@ -234,7 +233,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.test_dataset = None
         self.predict_dataset = None
 
-    def setup(self, stage: str) -> None:  # noqa: WPS324
+    def setup(self, stage: str) -> None:
         if self.file_paths is None or self.slices is None:
             self._load_file_paths_and_slices()
 

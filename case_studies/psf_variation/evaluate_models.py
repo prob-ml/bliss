@@ -250,7 +250,7 @@ def plot_metric(data, metric, metric_cfg):
             )
 
     # Place bin values on xticks
-    xticklabels = [f"{bins[i+1]:.2f}" for i in range(n_bins - 1)]
+    xticklabels = [f"{bins[i + 1]:.2f}" for i in range(n_bins - 1)]
     xticklabels.insert(0, f"$<${bins[0]:.2f}")
     ax.set_xticks(range(len(xticklabels)), xticklabels)
     ax.tick_params(axis="both", which="major", labelsize="x-large")
@@ -482,13 +482,13 @@ def plot_flux_within_one_mag(binned_avg_flux_probs, bins):
             label=label,
         )
 
-    xticklabels = [f"{bins[i+1]:.2f}" for i in range(len(bins) - 1)]
+    xticklabels = [f"{bins[i + 1]:.2f}" for i in range(len(bins) - 1)]
     xticklabels.insert(0, f"$<${bins[0]:.2f}")
     ax.set_xticks(range(len(xticklabels)), xticklabels)
 
     ax.tick_params(axis="both", which="major", labelsize="xx-large")
     ax.set_xlabel("r-band Magnitude", fontsize="xx-large")
-    ax.set_ylabel("Pr($f_{\mathrm{pred}}$ within 1 magnitude)", fontsize="xx-large")
+    ax.set_ylabel(r"Pr($f_{\mathrm{pred}}$ within 1 magnitude)", fontsize="xx-large")
     ax.legend(fontsize="x-large")
 
     fig.tight_layout()
@@ -599,7 +599,7 @@ def plot_prop_flux_in_interval(prop_all_in_eti, prop_bright_in_eti, prop_dim_in_
     for a in ax:
         a.set_xticks(intervals, xticks)
         a.tick_params(axis="both", which="major", labelsize="x-large")
-        a.set_xlabel("\% Credible Interval", fontsize="xx-large")
+        a.set_xlabel(r"\% Credible Interval", fontsize="xx-large")
     ax[0].set_ylabel("Proportion of true fluxes in interval", fontsize="xx-large")
 
     fig.tight_layout()
@@ -671,7 +671,7 @@ def plot_prob_true_source_type(binned_source_type_probs, bins):
             label=plot_config["name"],
         )
 
-    xticklabels = [f"{bins[i+1]:.2f}" for i in range(len(bins) - 1)]
+    xticklabels = [f"{bins[i + 1]:.2f}" for i in range(len(bins) - 1)]
     xticklabels.insert(0, f"$<${bins[0]:.2f}")
 
     ax.set_xticks(range(len(xticklabels)), xticklabels)
@@ -1029,7 +1029,7 @@ def plot_ci_width_data(data, plot_name, cfg_dict, bins):
         }
         ax.plot(binned_vals, **kwargs)
 
-    xticklabels = [f"{bins[i+1]:.2f}" for i in range(len(bins) - 1)]
+    xticklabels = [f"{bins[i + 1]:.2f}" for i in range(len(bins) - 1)]
     xticklabels.insert(0, f"$<${bins[0]:.2f}")
     ax.set_xticks(range(len(xticklabels)), xticklabels)
 
@@ -1057,9 +1057,9 @@ if args.plot_eval:
     print("Plotting eval results")
     # Load saved results
     cached_path = f"data/{dataset_name}/metrics.pt"
-    assert os.path.exists(
-        cached_path
-    ), f"ERROR: could not find cached metrics at {cached_path}. Try running with the --run_eval flag."
+    assert os.path.exists(cached_path), (
+        f"ERROR: could not find cached metrics at {cached_path}. Try running with the --run_eval flag."
+    )
     data = torch.load(f"data/{dataset_name}/metrics.pt")
 
     # Choose metrics to plot and specify labels, marker, and color for each model
@@ -1085,12 +1085,12 @@ if args.plot_eval:
             "yaxis_in_percent": False,
         },
         "flux_err_r_mpe": {
-            "ylabel": "r-band Flux Mean \% Error",
+            "ylabel": r"r-band Flux Mean \% Error",
             "metric_class": "flux_error",
             "yaxis_in_percent": True,
         },
         "flux_err_r_mape": {
-            "ylabel": "r-band Flux Mean Abosolute \% Error",
+            "ylabel": r"r-band Flux Mean Absolute \% Error",
             "metric_class": "flux_error",
             "yaxis_in_percent": True,
         },
@@ -1158,9 +1158,9 @@ if args.plot_calibration:
     cached_path = (
         f"/home/aakashdp/bliss/case_studies/psf_variation/data/{dataset_name}/posterior_dists.pt"
     )
-    assert os.path.exists(
-        cached_path
-    ), f"ERROR: could not find cached calibration data at {cached_path}. Try running with the --run_calibration flag."
+    assert os.path.exists(cached_path), (
+        f"ERROR: could not find cached calibration data at {cached_path}. Try running with the --run_calibration flag."
+    )
     pred_dists = torch.load(cached_path)
     os.makedirs(f"plots/{dataset_name}/calibration", exist_ok=True)
 
@@ -1279,9 +1279,9 @@ if args.plot_calibration:
     flux_scale = data["flux_scale"]
 
     metrics_to_plot = {
-        "ci_width": {"ylabel": "Average width of 95\% CI (nmgy)", "ylabel_size": "xx-large"},
+        "ci_width": {"ylabel": r"Average width of 95\% CI (nmgy)", "ylabel_size": "xx-large"},
         "ci_width_prop": {
-            "ylabel": "Average width of 95\% CI / true flux",
+            "ylabel": r"Average width of 95\% CI / true flux",
             "ylabel_size": "xx-large",
         },
         "flux_scale": {"ylabel": "Average $\\sigma$ for predicted flux", "ylabel_size": "xx-large"},

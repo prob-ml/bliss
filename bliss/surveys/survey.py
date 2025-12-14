@@ -82,7 +82,9 @@ class SurveyPredictIterator:
         # alignment is done after cropping here for speed, mainly during testing,
         # but this may not be a ideal in general
         if self.survey.align_to_band is not None:
-            images = align(images, wcs_list=item["wcs"], ref_band=self.survey.align_to_band)
+            wcs = item["wcs"]
+            wcs_list = [[wcs for _ in range(images.shape[0])]]
+            images = align(images[None], wcs_list=wcs_list, ref_band=self.survey.align_to_band)[0]
 
         # includes all bands if None
         if self.survey.crop_to_bands is not None:

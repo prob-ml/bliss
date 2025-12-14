@@ -166,7 +166,7 @@ class WeakLensingEncoder(Encoder):
                 )
 
         for metric_name, metric in metrics.items():
-            if hasattr(metric, "plot"):  # noqa: WPS421
+            if hasattr(metric, "plot"):
                 try:
                     plot_or_none = metric.plot()
                 except NotImplementedError:
@@ -184,7 +184,7 @@ class WeakLensingEncoder(Encoder):
         self.current_epoch_train_loss = 0.0
         self.current_epoch_train_batches = 0
         self.current_epochs += 1
-        print(  # noqa: WPS421
+        print(
             f"Average train loss for epoch {self.current_epoch}: {avg_epoch_train_loss}",
         )
 
@@ -201,7 +201,7 @@ class WeakLensingEncoder(Encoder):
         self.epoch_val_losses.append(avg_epoch_val_loss)
         self.current_epoch_val_loss = 0.0
         self.current_epoch_val_batches = 0
-        print(  # noqa: WPS421
+        print(
             f"Average val loss for epoch {self.current_epoch}: {avg_epoch_val_loss}",
         )
 

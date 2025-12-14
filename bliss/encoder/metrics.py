@@ -118,7 +118,7 @@ class GeneralBinMetric(Metric):
         self.n_bins = len(self.bin_cutoffs) + 1
 
     def add_bin_state(self, name, additional_dim=(), dist_reduce_fx="sum"):
-        default_values = torch.zeros(additional_dim + (self.n_bins,))
+        default_values = torch.zeros((*additional_dim, self.n_bins))
         self.add_state(name, default=default_values, dist_reduce_fx=dist_reduce_fx)
 
     def bucketize(self, value: torch.Tensor):
@@ -270,8 +270,9 @@ class DetectionPerformance(FluxBinMetricWithFilter):
             tcat_matches, ecat_matches = matching[i]
             error_msg = "tcat_matches and ecat_matches should be of the same size"
             assert len(tcat_matches) == len(ecat_matches), error_msg
-            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
-                device=self.device
+            tcat_matches, ecat_matches = (
+                tcat_matches.to(device=self.device),
+                ecat_matches.to(device=self.device),
             )
             n_true = true_cat["n_sources"][i].sum().item()
             n_est = est_cat["n_sources"][i].sum().item()
@@ -397,13 +398,14 @@ class SourceTypeAccuracy(FluxBinMetricWithFilter):
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            assert len(tcat_matches) == len(
-                ecat_matches
-            ), "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), (
+                "tcat_matches and ecat_matches should be of the same size"
+            )
             if tcat_matches.shape[0] == 0 or ecat_matches.shape[0] == 0:
                 continue
-            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
-                device=self.device
+            tcat_matches, ecat_matches = (
+                tcat_matches.to(device=self.device),
+                ecat_matches.to(device=self.device),
             )
             tcat_matches_filter = true_filter_bools[i][tcat_matches]
             tcat_matches = tcat_matches[tcat_matches_filter]
@@ -535,7 +537,7 @@ class FluxError(FluxBinMetric):
             abs_err = (true_flux - est_flux).abs()
             pct_err = (true_flux - est_flux) / true_flux
             abs_pct_err = pct_err.abs()
-            for band in range(len(self.survey_bands)):  # noqa: WPS518
+            for band in range(len(self.survey_bands)):
                 tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)
                 tmp = tmp.scatter_add(0, bins.reshape(-1), abs_err[..., band].reshape(-1))
                 self.flux_abs_err[band] += tmp

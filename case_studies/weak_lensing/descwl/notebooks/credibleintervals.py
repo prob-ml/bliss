@@ -315,7 +315,6 @@ def draw_credible_interval(ckpt, setting):
 
 
 def draw_scatter(ckpt, setting):
-
     with initialize(config_path="../", version_base=None):
         cfg = compose(
             "config_descwl",
@@ -438,12 +437,12 @@ def draw_scatter(ckpt, setting):
         pad_inches=0,
     )
 
-    print(  # noqa: WPS421
+    print(
         f"Shear 1:\nc ± 3SE = {lr1.intercept:.6f} ± "
         f"{3 * lr1.intercept_stderr:.6f}, m ± 3SE = {lr1.slope - 1:.6f} ± "
         f"{3 * lr1.stderr}\n"
     )
-    print(  # noqa: WPS421
+    print(
         f"Shear 2:\nc ± 3SE = {lr2.intercept:.6f} ± "
         f"{3 * lr2.intercept_stderr:.6f}, m ± 3SE = {lr2.slope - 1:.6f} ± "
         f"{3 * lr2.stderr}"

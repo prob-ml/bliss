@@ -294,7 +294,7 @@ class LensingDC2DataModule(DC2DataModule):
 
         data_to_cache = unpack_dict(data_splits)
 
-        for i in range(self.n_image_split**2):  # noqa: WPS426
+        for i in range(self.n_image_split**2):
             r = int(
                 1000 * round(data_to_cache[i]["tile_catalog"]["ra"].abs().nanmedian().item(), 3)
             )

@@ -9,35 +9,39 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10"]
+        python-version: ["3.12"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          persist-credentials: false # otherwise, the token used is the GITHUB_TOKEN, instead of your personal access token.
-          fetch-depth: 0 # otherwise, there would be errors pushing refs to the destination repository.
+          persist-credentials: false
+          fetch-depth: 0
 
-      - name: Install poetry
-        run: pipx install poetry
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "poetry"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
 
-      - name: Install poetry dependencies
+      - name: Install dependencies
         run: |
-          poetry install
+          uv sync --all-extras
 
       - name: Create local changes
         run: |
           pushd ./docs/docsrc
-          poetry run make clean
-          poetry run make github
+          uv run make clean
+          uv run make github
           popd
           git add --force ./docs
           git restore --staged ./docs/docsrc/bin
@@ -49,7 +53,7 @@ jobs:
           git commit -m "Generate docs" -a
 
       - name: Push changes
-        uses: ad-m/github-push-action@887c31bd838a40c4da09953b6df364b5439bd7c3
+        uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: refs/heads/master-sphinx

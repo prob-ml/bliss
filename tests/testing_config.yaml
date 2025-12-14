@@ -15,7 +15,7 @@ paths:
 prior:
     n_tiles_h: 4
     n_tiles_w: 4
-    batch_size: 2
+    batch_size: 1
     prob_galaxy: 0.5
 
 simulator:
@@ -39,12 +39,15 @@ surveys:
               camcol: 1
               fields: [12]
         load_image_data: true
+    des:
+        psf_config:
+            psf_slen: 25  # reduced from 63 for faster galsim rendering in tests
     dc2:
         dc2_image_dir: ${paths.dc2}/dc2_multiband/
         cached_data_path: ${paths.output}/dc2_tmp_cached_data
-        n_image_split: 5
-        image_lim: [800, 800]
-        batch_size: 4
+        n_image_split: 3
+        image_lim: [480, 480]
+        batch_size: 1
         prepare_data_processes_num: 1
         data_in_one_cached_file: 1
 

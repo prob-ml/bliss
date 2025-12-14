@@ -12,11 +12,11 @@ on:
 
 jobs:
   build:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        python-version: ["3.10"]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout github repo (+ download lfs dependencies)
@@ -24,47 +24,38 @@ jobs:
         with:
           lfs: true
 
-      - name: Install poetry
-        run: pipx install poetry
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
+
+      - name: Install fftw3
+        run: sudo apt-get install libfftw3-dev
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "poetry"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Create environment variables
         run: |
           echo "JUPYTER_PLATFORM_DIRS=1" >> $GITHUB_ENV
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Install poetry dependencies
-        run: |
-          poetry install --sync
+      - name: Install dependencies
+        run: uv sync --all-extras
 
-      - name: Run black
-        run: |
-          poetry run black --check .
+      - name: Run ruff format check
+        run: uv run ruff format --check .
 
-      - name: Run flake8
-        run: |
-          poetry run flake8 bliss/ tests/ case_studies/
-
-      - name: Run pylint
-        run: |
-          poetry run pylint bliss/ tests/ case_studies/
-
-      - name: Run darglint
-        run: |
-          poetry run darglint bliss/ tests/
+      - name: Run ruff linter
+        run: uv run ruff check bliss/ tests/ case_studies/
 
       - name: Run Tests on the CPU
-        run: |
-          poetry run pytest --cov=./bliss --cov-report=xml --durations=0
-
-      - name: Run Tests on the GPU
-        run: |
-          poetry run pytest --gpu
+        run: uv run pytest --cov=./bliss --cov-report=xml --durations=0
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

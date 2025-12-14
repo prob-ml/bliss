@@ -89,7 +89,7 @@ class Encoder(pl.LightningModule):
         # Generate all binary combinations for n^2 elements
         n = 2
         binary_combinations = list(itertools.product([0, 1], repeat=n * n))
-        mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)  # noqa: WPS114
+        mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)
         self.register_buffer("mask_patterns", mask_patterns)
 
         self.initialize_networks()
@@ -265,7 +265,7 @@ class Encoder(pl.LightningModule):
         x_features = self.get_features(batch)
         loss = torch.zeros_like(x_features[:, 0, :, :])
 
-        for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
+        for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns, strict=True):
             history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
             x_color_context = self.make_color_context(target_cat, history_mask)
             x_features_color = torch.cat((x_features, x_color_context), dim=1)
@@ -395,16 +395,15 @@ class Encoder(pl.LightningModule):
             self.log(f"{logging_name}/{k}", v, sync_dist=True)
 
         for metric_name, metric in metrics.items():
-            if hasattr(metric, "plot"):  # noqa: WPS421
-                try:
-                    plot_or_none = metric.plot()
-                except NotImplementedError:
-                    continue
+            try:
+                plot_or_none = metric.plot()
+            except NotImplementedError:
+                continue
+            if self.logger and plot_or_none:
                 name = f"Epoch_{self.current_epoch}" if show_epoch else ""
                 name = f"{name}/{logging_name}_{metric_name}"
-                if self.logger and plot_or_none:
-                    fig, _axes = plot_or_none
-                    self.logger.experiment.add_figure(name, fig)
+                fig, _axes = plot_or_none
+                self.logger.experiment.add_figure(name, fig)
 
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
