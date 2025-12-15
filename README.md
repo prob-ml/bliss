@@ -100,7 +100,7 @@ Configuration files are located in `bliss/conf/` and can be composed and overrid
 
 The `case_studies/` directory contains research applications of BLISS:
 
-- **weak_lensing/** - Shear (γ) and convergence (κ) estimation, validated on DC2 and DECaLS simulations
+- **weak_lensing/** - Tomographic shear (γ) and convergence (κ) mapping
 - **redshift/** - Photo-z estimation (BLISS-PZ) with multiple variational families
 - **galaxy_clustering/** - Galaxy cluster detection and membership prediction, validated on DES DR2
 - **dc2_cataloging/** - Full cataloging pipeline for DC2 simulation

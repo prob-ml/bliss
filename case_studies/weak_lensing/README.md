@@ -1,25 +1,19 @@
-### Neural posterior estimation of weak lensing shear and convergence
-#### Tim White, Shreyas Chandrashekaran, Camille Avestruz, and Jeffrey Regier
-#### with assistance from Dingrui Tao, Steve Fan, and Tahseen Younus
+### Neural posterior estimation for tomographic field-level weak lensing inference
+#### Tim White, Shreyas Chandrashekaran, Dingrui Tao, Camille Avestruz, and Jeffrey Regier
+#### with assistance from Steve Fan and Tahseen Younus
 
-This case study aims to estimate weak lensing shear and convergence for the DC2 simulated sky survey. See `notebooks/dc2/manuscript` for our most recent results.
+In this case study, we use neural posterior estimation to infer tomographic shear and convergence maps from LSST-like images.
 
-Some useful commands:
-
-- Train `lensing_encoder` on DC2 images
+To train the encoder on DC2 images, run
 
 ```
-nohup bliss -cp /home/twhit/bliss/case_studies/weak_lensing/ -cn lensing_config_dc2.yaml mode=train &> train_on_dc2.out &
+nohup bliss -cp <path>/bliss/case_studies/weak_lensing/dc2 -cn config_dc2.yaml mode=train &> train_on_dc2.out &
 ```
 
-- Generate synthetic images with shear and convergence, as specified in `lensing_prior`
+To train the encoder on descwl-shear-sims images, run
 
 ```
-nohup bliss -cp /home/twhit/bliss/case_studies/weak_lensing/ -cn lensing_config_simulator.yaml mode=generate &> generate_synthetic.out &
+nohup bliss -cp <path>/bliss/case_studies/weak_lensing/descwl -cn config_descwl.yaml mode=train &> train_on_descwl.out &
 ```
 
-- Train `lensing_encoder` on synthetic images:
-
-```
-nohup bliss -cp /home/twhit/bliss/case_studies/weak_lensing/ -cn lensing_config_simulator.yaml mode=train &> train_on_synthetic.out &
-```
+See `dc2/notebooks` and `descwl/notebooks` for some exploratory plots and our most recent results.

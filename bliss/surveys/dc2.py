@@ -413,7 +413,7 @@ class DC2FullCatalog(FullCatalog):
                 else:
                     psf_params_cur_band.append(catalog[f"{i}{b}"].values.astype(np.float32))
             psf_params_list.append(
-                torch.tensor(psf_params_cur_band)
+                torch.tensor(np.array(psf_params_cur_band))
             )  # bands x 4 (params per band) x n_obj
 
         return torch.stack(flux_list).t(), torch.stack(psf_params_list).unsqueeze(0)

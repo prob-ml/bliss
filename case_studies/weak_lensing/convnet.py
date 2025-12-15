@@ -10,8 +10,9 @@ class WeakLensingNet(nn.Module):
         self,
         n_bands,
         ch_per_band,
-        n_pixels_per_side,
-        n_tiles_per_side,
+        res_init,
+        res_midpoint,
+        res_final,
         ch_init,
         ch_max,
         ch_final,
@@ -26,8 +27,6 @@ class WeakLensingNet(nn.Module):
         if n_var_params is not None:
             ch_final = max(ch_final, 2 ** math.ceil(math.log2(n_var_params)))
 
-        res_midpoint = int(math.sqrt(n_pixels_per_side * n_tiles_per_side))
-
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, ch_init, [ch_per_band, 5, 5], padding=[0, 2, 2]),
             nn.GroupNorm(num_groups=32, num_channels=ch_init),
@@ -38,9 +37,9 @@ class WeakLensingNet(nn.Module):
             ch_init,
             ch_max,
             ch_final,
-            n_pixels_per_side,
+            res_init,
             res_midpoint,
-            n_tiles_per_side,
+            res_final,
             initial_downsample,
             more_up_layers,
             num_bottleneck_layers,

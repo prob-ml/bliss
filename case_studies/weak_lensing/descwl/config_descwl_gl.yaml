@@ -1,20 +1,27 @@
 ---
 defaults:
-    - ../../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 
-mode: train
+# completely disable hydra logging
+# https://github.com/facebookresearch/hydra/issues/910
+hydra:
+    output_subdir: null
+    run:
+        dir: .
 
 paths:
-    cached_data: /scratch/regier_root/regier0/taodingr/data/weak_lensing/weak_lensing_img2048_WLD_80_star_max_100_draw_bright_varying_shear
-    output: /scratch/regier_root/regier0/taodingr/bliss
+    cached_data: /scratch/regier_root/regier1/twhit/data/weak_lensing/weak_lensing_img2048_WLD_80_star_max_100_draw_bright_varying_shear
+    output: /scratch/regier_root/regier1/twhit/bliss
 
 cached_simulator:
+    _target_: bliss.cached_dataset.CachedSimulatedDataModule
     batch_size: 1
     splits: 0:70/70:80/80:100
-    train_transforms: []
     num_workers: 1
+    cached_data_path: ${paths.cached_data}
+    train_transforms: []
+    nontrain_transforms: []
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
@@ -26,7 +33,7 @@ variational_factors:
 
 lensing_normalizers_nan:
     nan:
-        _target_: case_studies.weak_lensing.image_normalizer.NanClipNormalizer
+        _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
 
 lensing_metrics:
     _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
@@ -39,27 +46,27 @@ lensing_plots:
 
 encoder:
     _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
-    survey_bands: [r,i,z]
-    reference_band: 0
-    tile_slen: 2048
-    n_pixels_per_side: 2048
-    n_tiles_per_side: 1
+    n_bands: 3
+    res_init: 2048  # num pixels per side
+    res_midpoint: 128
+    res_final: 8  # num tiles per side
     ch_init: 64
     ch_max: 512
-    ch_final: 64
+    ch_final: 128
     initial_downsample: true
     more_up_layers: false
     num_bottleneck_layers: 0
-    optimizer_params:
-        lr: 1e-3
-    scheduler_params:
-        milestones: [16]
-        gamma: 0.1
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
-        tile_slen: ${encoder.tile_slen}
+        tile_slen: 2048
         factors: ${variational_factors}
+    optimizer_params:
+        lr: 1e-4
+    scheduler_params:
+        milestones: []
+        gamma: 1.0
+    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
@@ -72,22 +79,42 @@ encoder:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
         metrics: ${lensing_plots}
-    use_double_detect: false
-    use_checkerboard: false
-    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
+
+mode: train
 
 train:
     trainer:
+        _target_: pytorch_lightning.Trainer
         logger:
+            _target_: pytorch_lightning.loggers.TensorBoardLogger
+            save_dir: ${paths.output}
             name: WeakLensingResultsDescwl
-            version: ${now:%Y-%m-%d_%H-%M}_WLD_80_star_max_100_draw_bright_with_clip_99_percentile
+            version: ${now:%Y-%m-%d_%H-%M}
+            default_hp_metric: false
+        reload_dataloaders_every_n_epochs: 0
+        check_val_every_n_epoch: 1
+        log_every_n_steps: 10
         max_epochs: 300
+        accelerator: gpu
         devices: 1
-        use_distributed_sampler: false
         precision: 32-true
     callbacks:
+        checkpointing:
+            _target_: pytorch_lightning.callbacks.ModelCheckpoint
+            filename: "encoder_{epoch}"
+            save_top_k: 1
+            verbose: true
+            monitor: val/_loss
+            mode: min
+            save_on_train_epoch_end: false
         early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
             patience: 100
     data_source: ${cached_simulator}
-    pretrained_weights: null
+    encoder: ${encoder}
     seed: 123123
+    pretrained_weights: null
+    ckpt_path: null
+    matmul_precision: high
