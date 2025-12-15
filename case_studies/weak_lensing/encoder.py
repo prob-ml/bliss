@@ -1,23 +1,26 @@
 from pathlib import Path
 from typing import Optional
 
+import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
+from torch.optim import Adam
+from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import BaseTileCatalog
-from bliss.encoder.encoder import Encoder
 from bliss.encoder.variational_dist import VariationalDist
+from bliss.global_env import GlobalEnv
 from case_studies.weak_lensing.convnet import WeakLensingNet
 
 
-class WeakLensingEncoder(Encoder):
+class WeakLensingEncoder(pl.LightningModule):
     def __init__(
         self,
-        survey_bands: list,
-        tile_slen: int,
-        n_pixels_per_side: int,
-        n_tiles_per_side: int,
+        n_bands: int,
+        res_init: int,
+        res_midpoint: int,
+        res_final: int,
         ch_init: int,
         ch_max: int,
         ch_final: int,
@@ -26,59 +29,50 @@ class WeakLensingEncoder(Encoder):
         num_bottleneck_layers: int,
         image_normalizers: list,
         var_dist: VariationalDist,
-        sample_image_renders: MetricCollection,
+        optimizer_params: Optional[dict],
+        scheduler_params: Optional[dict],
+        loss_plots_location: str,
         mode_metrics: MetricCollection,
-        sample_metrics: Optional[MetricCollection] = None,
-        optimizer_params: Optional[dict] = None,
-        const_scheduler_params: Optional[dict] = None,
-        exp_scheduler_params: Optional[dict] = None,
-        reference_band: int = 2,
-        **kwargs,
+        sample_metrics: Optional[MetricCollection],
+        sample_image_renders: MetricCollection,
     ):
-        self.n_pixels_per_side = n_pixels_per_side
-        self.n_tiles_per_side = n_tiles_per_side
+        super().__init__()
+
+        self.n_bands = n_bands
+        self.res_init = res_init
+        self.res_midpoint = res_midpoint
+        self.res_final = res_final
         self.ch_init = ch_init
         self.ch_max = ch_max
         self.ch_final = ch_final
         self.initial_downsample = initial_downsample
         self.more_up_layers = more_up_layers
         self.num_bottleneck_layers = num_bottleneck_layers
-        self.const_scheduler_params = const_scheduler_params
-        self.exp_scheduler_params = exp_scheduler_params
-
-        super().__init__(
-            survey_bands=survey_bands,
-            tile_slen=tile_slen,
-            image_normalizers=image_normalizers,
-            var_dist=var_dist,
-            matcher=None,
-            sample_image_renders=sample_image_renders,
-            mode_metrics=mode_metrics,
-            sample_metrics=sample_metrics,
-            optimizer_params=optimizer_params,
-            scheduler_params=None,
-            use_double_detect=False,
-            use_checkerboard=False,
-            reference_band=reference_band,
-        )
+        self.image_normalizers = torch.nn.ModuleList(image_normalizers.values())
+        self.var_dist = var_dist
+        self.optimizer_params = optimizer_params
+        self.scheduler_params = scheduler_params
+        self.loss_plots_location = loss_plots_location
+        self.mode_metrics = mode_metrics
+        self.sample_metrics = sample_metrics
+        self.sample_image_renders = sample_image_renders
 
         self.initialize_networks()
         self.epoch_train_losses = []
         self.current_epoch_train_loss = 0.0
         self.current_epoch_train_batches = 0
         self.current_epochs = 0
-        self.loss_plots_location = kwargs["loss_plots_location"]
         self.epoch_val_losses = []
         self.current_epoch_val_loss = 0.0
         self.current_epoch_val_batches = 0
 
-    # override
     def initialize_networks(self):
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         self.net = WeakLensingNet(
-            n_bands=len(self.survey_bands),
-            n_pixels_per_side=self.n_pixels_per_side,
-            n_tiles_per_side=self.n_tiles_per_side,
+            n_bands=self.n_bands,
+            res_init=self.res_init,
+            res_midpoint=self.res_midpoint,
+            res_final=self.res_final,
             ch_per_band=ch_per_band,
             ch_init=self.ch_init,
             ch_max=self.ch_max,
@@ -95,10 +89,6 @@ class WeakLensingEncoder(Encoder):
 
         x_cat_marginal = self.net(inputs)
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode, return_base_cat=True)
-
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        with torch.no_grad():
-            return self.sample(batch, use_mode=True)
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _, _, _ = batch["images"].shape[0:4]
@@ -125,18 +115,11 @@ class WeakLensingEncoder(Encoder):
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        """Pytorch lightning method."""
-        self._compute_loss(batch, "val")
-        self.update_metrics(batch, batch_idx)
-
-    def on_after_backward(self):
-        total_grad_norm = 0.0
-        for _, param in self.named_parameters():
-            if param.grad is not None:
-                param_grad_norm = param.grad.data.norm(2).item()
-                total_grad_norm += param_grad_norm**2
-        total_grad_norm = total_grad_norm**0.5
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
+        optimizer = Adam(self.parameters(), **self.optimizer_params)
+        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
+        return [optimizer], [scheduler]
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(batch["tile_catalog"])
@@ -176,6 +159,27 @@ class WeakLensingEncoder(Encoder):
                 if self.logger and plot_or_none:
                     fig, _axes = plot_or_none
                     self.logger.experiment.add_figure(name, fig)
+
+    def on_fit_start(self):
+        GlobalEnv.current_encoder_epoch = self.current_epoch
+
+    def on_train_epoch_start(self):
+        GlobalEnv.current_encoder_epoch = self.current_epoch
+
+    def training_step(self, batch, batch_idx):
+        return self._compute_loss(batch, "train")
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        with torch.no_grad():
+            return self.sample(batch, use_mode=True)
+
+    def validation_step(self, batch, batch_idx):
+        self._compute_loss(batch, "val")
+        self.update_metrics(batch, batch_idx)
+
+    def test_step(self, batch, batch_idx):
+        self._compute_loss(batch, "test")
+        self.update_metrics(batch, batch_idx)
 
     def on_train_epoch_end(self):
         # Compute the average loss for the epoch and reset counters

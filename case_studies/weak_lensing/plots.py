@@ -136,38 +136,38 @@ def plot_maps(
                 ax[i * num_redshift_bins + b, col].set_xticks([])
                 ax[i * num_redshift_bins + b, col].set_yticks([])
             ts1 = ax[i * num_redshift_bins + b, 0].imshow(
-                true_shear1[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.04, vmax=0.04
+                true_shear1[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.1, vmax=0.1
             )
             ax[i * num_redshift_bins + b, 0].set_title(f"True gamma1, redshift bin {b}")
             ax[i * num_redshift_bins + b, 0].set_ylabel(f"Image {idx}")
             plt.colorbar(ts1, fraction=0.045)
 
             es1 = ax[i * num_redshift_bins + b, 1].imshow(
-                est_shear1[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.04, vmax=0.04
+                est_shear1[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.1, vmax=0.1
             )
             ax[i * num_redshift_bins + b, 1].set_title(f"Est. gamma1, redshift bin {b}")
             plt.colorbar(es1, fraction=0.045)
 
             ts2 = ax[i * num_redshift_bins + b, 2].imshow(
-                true_shear2[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.04, vmax=0.04
+                true_shear2[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.1, vmax=0.1
             )
             ax[i * num_redshift_bins + b, 2].set_title(f"True gamma2, redshift bin {b}")
             plt.colorbar(ts2, fraction=0.045)
 
             es2 = ax[i * num_redshift_bins + b, 3].imshow(
-                est_shear2[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.04, vmax=0.04
+                est_shear2[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.1, vmax=0.1
             )
             ax[i * num_redshift_bins + b, 3].set_title(f"Est. gamma2, redshift bin {b}")
             plt.colorbar(es2, fraction=0.045)
 
             tc = ax[i * num_redshift_bins + b, 4].imshow(
-                true_convergence[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.04, vmax=0.04
+                true_convergence[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.2, vmax=0.2
             )
             ax[i * num_redshift_bins + b, 4].set_title(f"True kappa, redshift bin {b}")
             plt.colorbar(tc, fraction=0.045)
 
             ec = ax[i * num_redshift_bins + b, 5].imshow(
-                est_convergence[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.04, vmax=0.04
+                est_convergence[idx, ..., b].cpu(), cmap="coolwarm", vmin=-0.2, vmax=0.2
             )
             ax[i * num_redshift_bins + b, 5].set_title(f"Est. kappa, redshift bin {b}")
             plt.colorbar(ec, fraction=0.045)
@@ -212,8 +212,8 @@ def plot_lensing_scatterplots(
         ax[b, 0].scatter(
             true_shear1[..., b].flatten().cpu(), est_shear1[..., b].flatten().cpu(), alpha=0.2
         )
-        ax[b, 0].set_xlim(-0.04, 0.04)
-        ax[b, 0].set_ylim(-0.04, 0.04)
+        ax[b, 0].set_xlim(-0.1, 0.1)
+        ax[b, 0].set_ylim(-0.1, 0.1)
         ax[b, 0].set_xlabel("True shear 1")
         ax[b, 0].set_ylabel("Estimated shear 1")
         ax[b, 0].set_title(f"Redshift bin {b}")
@@ -222,8 +222,8 @@ def plot_lensing_scatterplots(
         ax[b, 1].scatter(
             true_shear2[..., b].flatten().cpu(), est_shear2[..., b].flatten().cpu(), alpha=0.2
         )
-        ax[b, 1].set_xlim(-0.04, 0.04)
-        ax[b, 1].set_ylim(-0.04, 0.04)
+        ax[b, 1].set_xlim(-0.1, 0.1)
+        ax[b, 1].set_ylim(-0.1, 0.1)
         ax[b, 1].set_xlabel("True shear 2")
         ax[b, 1].set_ylabel("Estimated shear 2")
         ax[b, 1].set_title(f"Redshift bin {b}")
@@ -234,8 +234,8 @@ def plot_lensing_scatterplots(
             est_convergence[..., b].flatten().cpu(),
             alpha=0.2,
         )
-        ax[b, 2].set_xlim(-0.04, 0.04)
-        ax[b, 2].set_ylim(-0.04, 0.04)
+        ax[b, 2].set_xlim(-0.2, 0.2)
+        ax[b, 2].set_ylim(-0.2, 0.2)
         ax[b, 2].set_xlabel("True convergence")
         ax[b, 2].set_ylabel("Estimated convergence")
         ax[b, 2].set_title(f"Redshift bin {b}")

@@ -37,3 +37,5 @@ multirun
 DC2_*.out
 input_images/
 WeakLensingResults*
+ResultsDC2*
+case_studies/weak_lensing/**/*.pt
