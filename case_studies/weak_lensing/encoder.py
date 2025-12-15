@@ -17,6 +17,7 @@ class WeakLensingEncoder(Encoder):
         survey_bands: list,
         tile_slen: int,
         n_pixels_per_side: int,
+        res_midpoint: int,
         n_tiles_per_side: int,
         ch_init: int,
         ch_max: int,
@@ -36,6 +37,7 @@ class WeakLensingEncoder(Encoder):
         **kwargs,
     ):
         self.n_pixels_per_side = n_pixels_per_side
+        self.res_midpoint = res_midpoint
         self.n_tiles_per_side = n_tiles_per_side
         self.ch_init = ch_init
         self.ch_max = ch_max
@@ -78,6 +80,7 @@ class WeakLensingEncoder(Encoder):
         self.net = WeakLensingNet(
             n_bands=len(self.survey_bands),
             n_pixels_per_side=self.n_pixels_per_side,
+            res_midpoint=self.res_midpoint,
             n_tiles_per_side=self.n_tiles_per_side,
             ch_per_band=ch_per_band,
             ch_init=self.ch_init,
