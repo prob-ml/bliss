@@ -1,10 +1,14 @@
 ---
 defaults:
-    - ../../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 
-mode: train
+# completely disable hydra logging
+# https://github.com/facebookresearch/hydra/issues/910
+hydra:
+    output_subdir: null
+    run:
+        dir: .
 
 paths:
     dc2: /scratch/regier_root/regier1/twhit/data/dc2
@@ -46,9 +50,7 @@ lensing_plots:
 
 encoder:
     _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
-    survey_bands: ["u", "g", "r", "i", "z", "y"]
-    reference_band: 2  # r-band
-    tile_slen: 256
+    n_bands: 6
     n_pixels_per_side: 2048
     res_midpoint: 128
     n_tiles_per_side: 8
@@ -58,16 +60,17 @@ encoder:
     initial_downsample: false
     more_up_layers: true
     num_bottleneck_layers: 0
+    image_normalizers: ${lensing_normalizers_nanpsf}
+    var_dist:
+        _target_: bliss.encoder.variational_dist.VariationalDist
+        tile_slen: ${surveys.dc2.tile_slen}
+        factors: ${variational_factors}
     optimizer_params:
         lr: 1e-4
     scheduler_params:
         milestones: []
         gamma: 1.0
-    image_normalizers: ${lensing_normalizers_nanpsf}
-    var_dist:
-        _target_: bliss.encoder.variational_dist.VariationalDist
-        tile_slen: ${encoder.tile_slen}
-        factors: ${variational_factors}
+    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
@@ -80,9 +83,6 @@ encoder:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
         metrics: ${lensing_plots}
-    use_double_detect: false
-    use_checkerboard: false
-    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
 
 surveys:
     dc2:
@@ -104,18 +104,41 @@ surveys:
             - _target_: case_studies.weak_lensing.data_augmentation.LensingRotateFlipTransform
         shuffle_file_order: false  # partition train/val/test by ra/dec so that we can compute 2PCFs on spatially contiguous test set
 
+mode: train
+
 train:
     trainer:
+        _target_: pytorch_lightning.Trainer
         logger:
-            name: ResultsDC2
+            _target_: pytorch_lightning.loggers.TensorBoardLogger
+            save_dir: ${paths.output}
+            name: tmp
             version: nanpsf_${encoder.ch_max}_${encoder.initial_downsample}_${encoder.more_up_layers}
+            default_hp_metric: false
+        reload_dataloaders_every_n_epochs: 0
+        check_val_every_n_epoch: 1
+        log_every_n_steps: 10
         max_epochs: 300
+        accelerator: gpu
         devices: 1
-        use_distributed_sampler: false
         precision: 32-true
     callbacks:
+        checkpointing:
+            _target_: pytorch_lightning.callbacks.ModelCheckpoint
+            filename: "encoder_{epoch}"
+            save_top_k: 1
+            verbose: true
+            monitor: val/_loss
+            mode: min
+            save_on_train_epoch_end: false
         early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
             patience: 100
     data_source: ${surveys.dc2}
-    pretrained_weights: null
+    encoder: ${encoder}
     seed: 123123
+    pretrained_weights: null
+    ckpt_path: null
+    matmul_precision: high
