@@ -18,9 +18,9 @@ class WeakLensingEncoder(pl.LightningModule):
     def __init__(
         self,
         n_bands: int,
-        n_pixels_per_side: int,
+        res_init: int,
         res_midpoint: int,
-        n_tiles_per_side: int,
+        res_final: int,
         ch_init: int,
         ch_max: int,
         ch_final: int,
@@ -39,9 +39,9 @@ class WeakLensingEncoder(pl.LightningModule):
         super().__init__()
 
         self.n_bands = n_bands
-        self.n_pixels_per_side = n_pixels_per_side
+        self.res_init = res_init
         self.res_midpoint = res_midpoint
-        self.n_tiles_per_side = n_tiles_per_side
+        self.res_final = res_final
         self.ch_init = ch_init
         self.ch_max = ch_max
         self.ch_final = ch_final
@@ -70,9 +70,9 @@ class WeakLensingEncoder(pl.LightningModule):
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         self.net = WeakLensingNet(
             n_bands=self.n_bands,
-            n_pixels_per_side=self.n_pixels_per_side,
+            res_init=self.res_init,
             res_midpoint=self.res_midpoint,
-            n_tiles_per_side=self.n_tiles_per_side,
+            res_final=self.res_final,
             ch_per_band=ch_per_band,
             ch_init=self.ch_init,
             ch_max=self.ch_max,

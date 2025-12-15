@@ -47,9 +47,9 @@ lensing_plots:
 encoder:
     _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
     n_bands: 3
-    n_pixels_per_side: 2048
+    res_init: 2048  # num pixels per side
     res_midpoint: 128
-    n_tiles_per_side: 1
+    res_final: 1  # num tiles per side
     ch_init: 64
     ch_max: 512
     ch_final: 128
