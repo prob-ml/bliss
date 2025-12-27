@@ -14,7 +14,7 @@ import pandas as pd
 import torch
 from astropy.io import fits
 
-from case_studies.weak_lensing.dc2.cached_dataset import CachedSimulatedDataModule
+from case_studies.weak_lensing.cached_dataset import CachedSimulatedDataModule
 from case_studies.weak_lensing.dc2.utils import (
     get_bands_flux_and_psf,
     map_nested_dicts,

@@ -274,7 +274,12 @@ class ScalarShearEncoder(pl.LightningModule):
         """Reshape scalar shear values to (batch, 1, 1, dim) for variational dist."""
         unflattened = {}
         for key, value in tile_catalog.items():
-            unflattened[key] = value.unsqueeze(1).unsqueeze(1)
+            if value.dim() == 1:
+                # (batch,) -> (batch, 1, 1, 1)
+                unflattened[key] = value.unsqueeze(1).unsqueeze(1).unsqueeze(-1)
+            else:
+                # (batch, dim) -> (batch, 1, 1, dim)
+                unflattened[key] = value.unsqueeze(1).unsqueeze(1)
         return unflattened
 
     def sample(self, batch, use_mode=True):

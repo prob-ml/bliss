@@ -1,4 +1,4 @@
-"""Cached dataset infrastructure for DC2 data loading.
+"""Cached dataset infrastructure for weak lensing case study.
 
 This is a standalone copy of the data loading infrastructure from bliss.cached_dataset,
 modified to remove GlobalEnv dependency.

@@ -15,7 +15,7 @@ paths:
     output: /scratch/regier_root/regier1/twhit/bliss
 
 cached_simulator:
-    _target_: bliss.cached_dataset.CachedSimulatedDataModule
+    _target_: case_studies.weak_lensing.cached_dataset.CachedSimulatedDataModule
     batch_size: 1
     splits: 0:70/70:80/80:100
     num_workers: 1
