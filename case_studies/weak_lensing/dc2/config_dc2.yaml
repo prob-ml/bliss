@@ -15,15 +15,15 @@ paths:
     output: /home/twhit/bliss
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.IndependentMVNFactor
+  - _target_: case_studies.weak_lensing.variational_dist.IndependentMVNFactor
     name: shear_1
     dim: ${surveys.dc2.num_redshift_bins}
     nll_gating: null
-  - _target_: bliss.encoder.variational_dist.IndependentMVNFactor
+  - _target_: case_studies.weak_lensing.variational_dist.IndependentMVNFactor
     name: shear_2
     dim: ${surveys.dc2.num_redshift_bins}
     nll_gating: null
-  - _target_: bliss.encoder.variational_dist.IndependentMVNFactor
+  - _target_: case_studies.weak_lensing.variational_dist.IndependentMVNFactor
     name: convergence
     dim: ${surveys.dc2.num_redshift_bins}
     nll_gating: null
@@ -36,7 +36,7 @@ lensing_normalizers_nanpsf:
     nan:
         _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
     psf:
-        _target_: bliss.encoder.image_normalizer.PsfAsImage
+        _target_: case_studies.weak_lensing.image_normalizer.PsfAsImage
         num_psf_params: 4
 
 lensing_metrics:
@@ -49,20 +49,20 @@ lensing_plots:
     save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
 
 encoder:
-    _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
+    _target_: case_studies.weak_lensing.encoder.MassMapEncoder
     n_bands: 6
     res_init: 2048  # num pixels per side
     res_midpoint: 128
     res_final: 8  # num tiles per side
     ch_init: 64
-    ch_max: 1024
+    ch_max: 512
     ch_final: 128
-    initial_downsample: false
-    more_up_layers: true
+    initial_downsample: true
+    more_up_layers: false
     num_bottleneck_layers: 0
     image_normalizers: ${lensing_normalizers_nanpsf}
     var_dist:
-        _target_: bliss.encoder.variational_dist.VariationalDist
+        _target_: case_studies.weak_lensing.variational_dist.VariationalDist
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${variational_factors}
     optimizer_params:

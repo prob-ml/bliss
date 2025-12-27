@@ -41,3 +41,20 @@ class NanClipNormalizer(torch.nn.Module):
             images_clipped,
             "b bands h w -> b bands 1 h w",
         )
+
+
+class PsfAsImage(torch.nn.Module):
+    def __init__(self, num_psf_params):
+        super().__init__()
+        self.num_psf_params = num_psf_params
+
+    def num_channels_per_band(self):
+        """Number of input channels for model based on this input normalizer."""
+        return self.num_psf_params
+
+    def get_input_tensor(self, batch):
+        assert "psf_params" in batch, "PsfAsImage specified but psf params not provided"
+        n, c, h, w = batch["images"].shape
+        psf_params = batch["psf_params"]
+        psf_params = psf_params.view(n, c, self.num_psf_params, 1, 1)
+        return psf_params.expand(n, c, self.num_psf_params, h, w)

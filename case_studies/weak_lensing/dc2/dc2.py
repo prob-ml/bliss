@@ -1,17 +1,24 @@
+"""Lensing DC2 data module - fully standalone implementation.
+
+This module is self-contained and has no dependencies on bliss core modules.
+"""
+
+import copy
 import logging
 import math
-import sys
+import pathlib
 from typing import List
 
 import numpy as np
 import pandas as pd
 import torch
+from astropy.io import fits
 
-from bliss.catalog import BaseTileCatalog
-from bliss.surveys.dc2 import (
-    DC2DataModule,
-    DC2FullCatalog,
+from case_studies.weak_lensing.dc2.cached_dataset import CachedSimulatedDataModule
+from case_studies.weak_lensing.dc2.utils import (
+    get_bands_flux_and_psf,
     map_nested_dicts,
+    plocs_from_ra_dec,
     split_tensor,
     unpack_dict,
     wcs_from_wcs_header_str,
@@ -19,12 +26,16 @@ from bliss.surveys.dc2 import (
 from case_studies.weak_lensing.utils.weighted_avg_ellip import compute_weighted_avg_ellip
 
 
-class LensingDC2DataModule(DC2DataModule):
+class LensingDC2DataModule(CachedSimulatedDataModule):
+    """Data module for lensing DC2 survey data."""
+
+    BANDS = ("u", "g", "r", "i", "z", "y")
+
     def __init__(
         self,
         dc2_image_dir: str,
         dc2_cat_path: str,
-        image_slen: int,  # assume square images: image_slen x image_slen
+        image_slen: int,
         n_image_split: int,
         tile_slen: int,
         splits: str,
@@ -39,16 +50,6 @@ class LensingDC2DataModule(DC2DataModule):
         **kwargs,
     ):
         super().__init__(
-            dc2_image_dir=dc2_image_dir,
-            dc2_cat_path=dc2_cat_path,
-            image_lim=[image_slen, image_slen],
-            n_image_split=n_image_split,
-            tile_slen=tile_slen,
-            max_sources_per_tile=tile_slen
-            ** 2,  # max of one source per pixel, TODO: calc max sources per tile
-            catalog_min_r_flux=-sys.maxsize - 1,  # smaller than any int
-            prepare_data_processes_num=1,
-            data_in_one_cached_file=100000,
             splits=splits,
             batch_size=batch_size,
             num_workers=num_workers,
@@ -59,15 +60,77 @@ class LensingDC2DataModule(DC2DataModule):
             shuffle_file_order=shuffle_file_order,
         )
 
+        self.dc2_image_dir = dc2_image_dir
+        self.dc2_cat_path = dc2_cat_path
         self.image_slen = image_slen
+        self.image_lim = [image_slen, image_slen]
+        self.n_image_split = n_image_split
+        self.tile_slen = tile_slen
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
         self.avg_ellip_kernel_size = avg_ellip_kernel_size
         self.avg_ellip_kernel_sigma = avg_ellip_kernel_sigma
         self.redshift_quantiles = redshift_quantiles
 
-    # override prepare_data
+        # Validate configuration
+        assert self.image_lim[0] == self.image_lim[1], (
+            "image_lim[0] should be equal to image_lim[1]"
+        )
+        assert self.image_lim[0] % self.n_image_split == 0, (
+            "image_lim is not divisible by n_image_split"
+        )
+        assert (self.image_lim[0] // self.n_image_split) % self.tile_slen == 0, "invalid tile_slen"
+
+        self._image_files = None
+        self._bg_files = None
+
+    def _load_image_and_bg_files_list(self):
+        """Load list of image and background files for all bands."""
+        img_pattern = "**/*/calexp*.fits"
+        bg_pattern = "**/*/bkgd*.fits"
+        image_files = []
+        bg_files = []
+
+        for band in self.bands:
+            band_path = self.dc2_image_dir + str(band)
+            img_file_list = list(pathlib.Path(band_path).glob(img_pattern))
+            bg_file_list = list(pathlib.Path(band_path).glob(bg_pattern))
+
+            image_files.append(sorted(img_file_list))
+            bg_files.append(sorted(bg_file_list))
+        n_image = len(bg_files[0])
+
+        self._image_files = image_files
+        self._bg_files = bg_files
+
+        return n_image
+
+    def read_image_for_bands(self, image_index):
+        """Read image data for all bands from FITS files."""
+        image_list = []
+        wcs_header_str = None
+        for b in range(self.n_bands):
+            image_frame = fits.open(self._image_files[b][image_index])
+            image_data = image_frame[1].data
+            if wcs_header_str is None:
+                wcs_header_str = image_frame[1].header.tostring()
+            image_frame.close()
+
+            image = torch.nan_to_num(
+                torch.from_numpy(image_data)[: self.image_lim[0], : self.image_lim[1]]
+            )
+            image_list.append(image)
+
+        return torch.stack(image_list), wcs_header_str
+
+    @staticmethod
+    def squeeze_tile_dict(tile_dict):
+        """Remove batch dimension from tile dict values."""
+        tile_dict_copy = copy.copy(tile_dict)
+        return {k: v.squeeze(0) for k, v in tile_dict_copy.items()}
+
     def prepare_data(self):
+        """Prepare cached data files if they don't exist."""
         if self.cached_data_path.exists():
             logger = logging.getLogger("LensingDC2DataModule")
             warning_msg = "WARNING: cached data already exists at [%s], we directly use it\n"
@@ -85,6 +148,10 @@ class LensingDC2DataModule(DC2DataModule):
             self.generate_cached_data(i)
 
     def to_tile_catalog(self, full_catalog, height, width):
+        """Convert full catalog to tile-level catalog.
+
+        Returns a plain dict (not BaseTileCatalog).
+        """
         plocs = full_catalog["plocs"].reshape(1, -1, 2)
         source_tile_coords = torch.div(plocs, self.tile_slen, rounding_mode="trunc").to(torch.int64)
         n_tiles_h = math.ceil(height / self.tile_slen)
@@ -142,10 +209,11 @@ class LensingDC2DataModule(DC2DataModule):
             tile_cat[f"{k}_count"] = v_count.reshape(
                 self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1]
             )
-        return BaseTileCatalog(tile_cat)
 
-    # override load_image_and_catalog
+        return tile_cat  # Return plain dict
+
     def load_image_and_catalog(self, image_index):
+        """Load image and catalog data for a given image index."""
         image, wcs_header_str = self.read_image_for_bands(image_index)
         wcs = wcs_from_wcs_header_str(wcs_header_str)
 
@@ -176,7 +244,7 @@ class LensingDC2DataModule(DC2DataModule):
         )
         del tile_cat["psf_sum"]
         del tile_cat["psf_count"]
-        tile_dict = self.squeeze_tile_dict(tile_cat.data)
+        tile_dict = self.squeeze_tile_dict(tile_cat)
 
         return {
             "tile_dict": tile_dict,
@@ -192,6 +260,7 @@ class LensingDC2DataModule(DC2DataModule):
         }
 
     def split_image_and_tile_cat(self, image, tile_cat, tile_cat_keys_to_split, psf_params):
+        """Split image and tile catalog into sub-images."""
         # split image
         split_lim = self.image_lim[0] // self.n_image_split
         image_splits = split_tensor(image, split_lim, 1, 2)
@@ -220,8 +289,8 @@ class LensingDC2DataModule(DC2DataModule):
             "psf_params": [p.flatten(0, 1).mean(0) for p in psf_splits],
         }
 
-    # override generate_cached_data
     def generate_cached_data(self, image_index):
+        """Generate and save cached data for a given image index."""
         result_dict = self.load_image_and_catalog(image_index)
 
         image = result_dict["inputs"]["image"]
@@ -311,9 +380,26 @@ class LensingDC2DataModule(DC2DataModule):
                 torch.save([tmp_clone], cached_data_file)
 
 
-class LensingDC2Catalog(DC2FullCatalog):
+class LensingDC2Catalog:
+    """Standalone catalog class for lensing DC2 data."""
+
+    def __init__(self, height, width, data):
+        self.height = height
+        self.width = width
+        self.data = data
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def items(self):
+        return self.data.items()
+
+    def keys(self):
+        return self.data.keys()
+
     @classmethod
     def read_catalog(cls, cat_path, wcs, height, width, **kwargs):
+        """Read and process catalog from pickle file."""
         catalog = pd.read_pickle(cat_path)
 
         galid = torch.from_numpy(catalog["galaxy_id"].values)
@@ -344,9 +430,9 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         redshift = torch.from_numpy(catalog["redshift"].values)
 
-        _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog, median=False)
+        _, psf_params = get_bands_flux_and_psf(kwargs["bands"], catalog, median=False)
 
-        plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
+        plocs = plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
         x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < height)
         x1_mask = (plocs[:, 1] > 0) & (plocs[:, 1] < width)
         plocs_mask = x0_mask * x1_mask
@@ -388,6 +474,7 @@ class LensingDC2Catalog(DC2FullCatalog):
 
     @classmethod
     def bin_catalog_by_redshift(cls, catalog_dict, height, width, **kwargs):
+        """Bin catalog by redshift quantiles."""
         nobj = catalog_dict["galid"].shape[0]
 
         redshift_bin = torch.zeros_like(catalog_dict["redshift"])

@@ -11,7 +11,7 @@ hydra:
         dir: .
 
 paths:
-    cached_data: /scratch/regier_root/regier1/twhit/data/weak_lensing/weak_lensing_img2048_WLD_80_star_max_100_draw_bright_varying_shear
+    cached_data: /nfs/turbo/lsa-regier/scratch/descwl/setting1
     output: /scratch/regier_root/regier1/twhit/bliss
 
 cached_simulator:
@@ -24,10 +24,10 @@ cached_simulator:
     nontrain_transforms: []
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: case_studies.weak_lensing.variational_dist.NormalFactor
     name: shear_1
     nll_gating: null
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: case_studies.weak_lensing.variational_dist.NormalFactor
     name: shear_2
     nll_gating: null
 
@@ -45,20 +45,11 @@ lensing_plots:
     save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
 
 encoder:
-    _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
+    _target_: case_studies.weak_lensing.encoder.ScalarShearEncoder
     n_bands: 3
-    res_init: 2048  # num pixels per side
-    res_midpoint: 128
-    res_final: 8  # num tiles per side
-    ch_init: 64
-    ch_max: 512
-    ch_final: 128
-    initial_downsample: true
-    more_up_layers: false
-    num_bottleneck_layers: 0
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
-        _target_: bliss.encoder.variational_dist.VariationalDist
+        _target_: case_studies.weak_lensing.variational_dist.VariationalDist
         tile_slen: 2048
         factors: ${variational_factors}
     optimizer_params:
@@ -88,7 +79,7 @@ train:
         logger:
             _target_: pytorch_lightning.loggers.TensorBoardLogger
             save_dir: ${paths.output}
-            name: WeakLensingResultsDescwl
+            name: ResultsDescwl
             version: ${now:%Y-%m-%d_%H-%M}
             default_hp_metric: false
         reload_dataloaders_every_n_epochs: 0

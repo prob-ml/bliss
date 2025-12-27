@@ -1,11 +1,12 @@
 import math
 
+from einops import rearrange
 from torch import nn
 
 from case_studies.weak_lensing.convnet_layers import Map, ResNetBlock
 
 
-class WeakLensingNet(nn.Module):
+class MassMapNet(nn.Module):
     def __init__(
         self,
         n_bands,
@@ -119,3 +120,51 @@ class WeakLensingNet(nn.Module):
             x = self.final_layer(x)
 
         return x
+
+
+class ScalarShearNet(nn.Module):
+    def __init__(
+        self,
+        n_bands,
+        n_var_params,
+    ):
+        super().__init__()
+
+        self.preprocess = nn.Sequential(
+            nn.Conv2d(n_bands, 64, kernel_size=5, padding=2),
+            nn.GroupNorm(num_groups=32, num_channels=64),
+            nn.SiLU(),
+        )
+
+        layers = self._make_layers()
+
+        self.resnet_blocks = nn.ModuleList(layers)
+
+        self.final_layer = nn.Linear(32 * 8 * 8, n_var_params)
+
+    def _make_layers(
+        self,
+    ):
+        layers = [
+            ResNetBlock(64, 128, stride=2),  # 2048 -> 1024
+            ResNetBlock(128, 256, stride=2),  # 1024 -> 512
+            ResNetBlock(256, 512, stride=2),  # 512 -> 256
+            ResNetBlock(512, 512, stride=2),  # 256 -> 128
+            ResNetBlock(512, 256, stride=2),  # 128 -> 64
+            ResNetBlock(256, 128, stride=2),  # 64 -> 32
+            ResNetBlock(128, 64, stride=2),  # 32 -> 16
+            ResNetBlock(64, 32, stride=2),  # 16 -> 8
+        ]
+
+        return layers
+
+    def forward(self, x):
+        x = self.preprocess(x)
+
+        for block in self.resnet_blocks:
+            x = block(x)
+
+        x_flattened = rearrange(x, "b c h w -> b (c h w)")
+        x = self.final_layer(x_flattened)  # (batch, n_var_params)
+
+        return x.unsqueeze(1).unsqueeze(1)  # (batch, 1, 1, n_var_params)
