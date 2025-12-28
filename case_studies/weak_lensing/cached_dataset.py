@@ -154,6 +154,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         subset_fraction: float = None,
         shuffle_file_order: bool = True,
         seed: int = 0,
+        splits_type: str = "percent",
     ):
         super().__init__()
 
@@ -166,6 +167,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.subset_fraction = subset_fraction
         self.shuffle_file_order = shuffle_file_order
         self.seed = seed
+        self.splits_type = splits_type
 
         self.file_paths = None
         self.slices = None
@@ -216,16 +218,25 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             file_names = file_names[: math.ceil(len(file_names) * self.subset_fraction)]
         self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
 
-        self.slices = self.parse_slices(self.splits, len(self.file_paths))
+        self.slices = self.parse_slices(self.splits, len(self.file_paths), self.splits_type)
 
     def _percent_to_idx(self, x, length):
         """Converts string in percent to an integer index."""
         return int(float(x.strip()) / 100 * length) if x.strip() else None
 
-    def parse_slices(self, splits: str, length: int):
+    def _count_to_idx(self, x):
+        """Converts string count to an integer index."""
+        return int(x.strip()) if x.strip() else None
+
+    def parse_slices(self, splits: str, length: int, splits_type: str = "percent"):
         slices = [slice(0, 0) for _ in range(3)]
         for i, data_split in enumerate(splits.split("/")):
-            slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
+            if splits_type == "percent":
+                slices[i] = slice(
+                    *(self._percent_to_idx(val, length) for val in data_split.split(":"))
+                )
+            else:  # count
+                slices[i] = slice(*(self._count_to_idx(val) for val in data_split.split(":")))
         return slices
 
     def _get_dataset(self, sub_file_paths, defined_transforms, shuffle: bool = False):

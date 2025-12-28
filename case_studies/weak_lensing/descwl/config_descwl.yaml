@@ -17,7 +17,8 @@ paths:
 cached_simulator:
     _target_: case_studies.weak_lensing.cached_dataset.CachedSimulatedDataModule
     batch_size: 1
-    splits: 0:70/70:80/80:100
+    splits: 0:2000/2000:4000/4000:14000
+    splits_type: count
     num_workers: 1
     cached_data_path: ${paths.cached_data}
     train_transforms: []

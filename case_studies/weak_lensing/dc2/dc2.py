@@ -47,6 +47,7 @@ class LensingDC2DataModule(CachedSimulatedDataModule):
         cached_data_path: str,
         train_transforms: List,
         shuffle_file_order: bool,
+        splits_type: str = "percent",
         **kwargs,
     ):
         super().__init__(
@@ -58,6 +59,7 @@ class LensingDC2DataModule(CachedSimulatedDataModule):
             nontrain_transforms=[],
             subset_fraction=None,
             shuffle_file_order=shuffle_file_order,
+            splits_type=splits_type,
         )
 
         self.dc2_image_dir = dc2_image_dir
