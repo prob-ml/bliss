@@ -1,185 +1,35 @@
 """Functions to evaluate the performance of BLISS predictions."""
+
+import math
 from collections import defaultdict
-from typing import DefaultDict, Dict, Optional, Tuple
+from copy import deepcopy
+from typing import Callable, DefaultDict, Dict, Tuple
 
 import galsim
 import numpy as np
+import sep
 import torch
-from astropy.table import Table
-from astropy.wcs import WCS
 from einops import rearrange, reduce
 from scipy import optimize as sp_optim
-from sklearn.metrics import confusion_matrix
 from torch import Tensor
-from torchmetrics import Metric
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog
-from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
+from bliss.catalog import FullCatalog, collate
+from bliss.datasets.lsst import APERTURE_BACKGROUND, BACKGROUND, PIXEL_SCALE
+from bliss.encoders.autoencoder import CenteredGalaxyDecoder
+from bliss.render_tiles import reconstruct_image_from_ptiles, render_galaxy_ptiles
 
 
-class DetectionMetrics(Metric):
-    """Calculates aggregate detection metrics on batches over full images (not tiles)."""
-
-    tp: Tensor
-    fp: Tensor
-    avg_distance: Tensor
-    tp_gal: Tensor
-    full_state_update: Optional[bool] = True
-
-    def __init__(
-        self,
-        slack: float = 1.0,
-        dist_sync_on_step: bool = False,
-        disable_bar: bool = True,
-    ) -> None:
-        """Computes matches between true and estimated locations.
-
-        Args:
-            slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
-            dist_sync_on_step: See torchmetrics documentation.
-            disable_bar: Whether to show progress bar
-
-        Attributes:
-            tp: true positives = # of sources matched with a true source.
-            fp: false positives = # of predicted sources not matched with true source
-            avg_distance: Average l-infinity distance over matched objects.
-            total_true_n_sources: Total number of true sources over batches seen.
-            total_correct_class: Total # of correct classifications over matched objects.
-            total_n_matches: Total # of matches over batches.
-            conf_matrix: Confusion matrix (galaxy vs star)
-            disable_bar: Whether to show progress bar
-        """
-        super().__init__(dist_sync_on_step=dist_sync_on_step)
-
-        self.slack = slack
-        self.disable_bar = disable_bar
-
-        self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("tp_gal", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
-
-    # pylint: disable=no-member
-    def update(self, true: FullCatalog, est: FullCatalog) -> None:  # type: ignore
-        """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
-        assert true.batch_size == est.batch_size
-
-        count = 0
-        desc = "Detection Metric per batch"
-        for b in tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
-            ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
-            tlocs, elocs = true.plocs[b], est.plocs[b]
-            if ntrue > 0 and nest > 0:
-                mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
-                tp = len(elocs[mest][dkeep])  # n_matches
-                true_galaxy_bools = true["galaxy_bools"][b][mtrue][dkeep]
-                tp_gal = true_galaxy_bools.bool().sum()
-                fp = nest - tp
-                assert fp >= 0
-                self.tp += tp
-                self.tp_gal += tp_gal
-                self.fp += fp
-                self.avg_distance += avg_distance
-                self.total_true_n_sources += ntrue  # type: ignore
-                count += 1
-        self.avg_distance /= count
-
-    def compute(self) -> Dict[str, Tensor]:
-        precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
-        recall = self.tp / self.total_true_n_sources  # = TPR = true positive rate
-        f1 = (2 * precision * recall) / (precision + recall)
-        return {
-            "tp": self.tp,
-            "fp": self.fp,
-            "precision": precision,
-            "recall": recall,
-            "f1": f1,
-            "avg_distance": self.avg_distance,
-            "n_galaxies_detected": self.tp_gal,
-        }
-
-
-class ClassificationMetrics(Metric):
-    """Calculates aggregate classification metrics on batches over full images (not tiles)."""
-
-    total_n_matches: Tensor
-    total_coadd_n_matches: Tensor
-    total_coadd_gal_matches: Tensor
-    total_correct_class: Tensor
-    conf_matrix: Tensor
-    full_state_update: Optional[bool] = True
-
-    def __init__(
-        self,
-        slack: float = 1.0,
-        dist_sync_on_step: bool = False,
-    ) -> None:
-        """Computes matches between true and estimated locations.
-
-        Args:
-            slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
-            dist_sync_on_step: See torchmetrics documentation.
-
-        Attributes:
-            total_n_matches: Total number of true matches.
-            total_correct_class: Total number of correct classifications.
-            Confusion matrix: Confusion matrix of galaxy vs. star
-        """
-        super().__init__(dist_sync_on_step=dist_sync_on_step)
-
-        self.slack = slack
-
-        self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("total_coadd_gal_matches", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
-
-    # pylint: disable=no-member
-    def update(self, true, est):
-        """Update the internal state of the metric including correct # of classifications."""
-        assert true.batch_size == est.batch_size
-        for b in range(true.batch_size):
-            ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
-            tlocs, elocs = true.plocs[b], est.plocs[b]
-            tgbool, egbool = true["galaxy_bools"][b].reshape(-1), est["galaxy_bools"][b].reshape(-1)
-            if ntrue > 0 and nest > 0:
-                mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
-                tgbool = tgbool[mtrue][dkeep].reshape(-1)
-                egbool = egbool[mest][dkeep].reshape(-1)
-                self.total_n_matches += len(egbool)
-                self.total_coadd_gal_matches += tgbool.sum().int().item()
-                self.total_correct_class += tgbool.eq(egbool).sum().int()
-                self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
-
-    # pylint: disable=no-member
-    def compute(self) -> Dict[str, Tensor]:
-        """Calculate misclassification accuracy, and confusion matrix."""
-        return {
-            "n_matches": self.total_n_matches,
-            "n_matches_gal_coadd": self.total_coadd_gal_matches,
-            "class_acc": self.total_correct_class / self.total_n_matches,
-            "conf_matrix": self.conf_matrix,
-        }
-
-
-def match_by_locs(true_locs, est_locs, slack=1.0):
+def match_by_locs(locs1: Tensor, locs2: Tensor, *, slack: float = 2.0):
     """Match true and estimated locations and returned indices to match.
-
-    Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
-    The matching is done with `scipy.optimize.linear_sum_assignment`, which implements
-    the Hungarian algorithm.
 
     Automatically discards matches where at least one location has coordinates **exactly** (0, 0).
 
     Args:
         slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
-        true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
+        locs1: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
             The centroids should be in units of PIXELS.
-        est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
+        locs2: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
             number of sources. The centroids should be in units of PIXELS.
 
     Returns:
@@ -189,38 +39,74 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
         - dist_keep: Matched objects to keep based on l1 distances.
         - avg_distance: Average l-infinity distance over matched objects.
     """
-    assert len(true_locs.shape) == len(est_locs.shape) == 2
-    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
+    assert locs1.ndim == locs2.ndim == 2
+    assert locs1.shape[-1] == locs2.shape[-1] == 2
 
-    locs1 = true_locs.view(-1, 2)
-    locs2 = est_locs.view(-1, 2)
-
-    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
-    locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
-
-    # Penalize all pairs which are greater than slack apart to favor valid matches.
-    locs_err = locs_err + (locs_err_l_infty > slack) * locs_err.max()
+    locs_diff = rearrange(locs1, "i xy -> i 1 xy") - rearrange(locs2, "i xy -> 1 i xy")
+    dist1 = reduce(locs_diff.pow(2), "i j xy -> i j", "sum").sqrt()
+    err = torch.where(dist1 > slack, dist1.max() * 100, dist1)
 
     # find minimal permutation and return matches
-    row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
+    row_indx, col_indx = sp_optim.linear_sum_assignment(err.detach().cpu())
 
-    # we match objects based on distance too.
-    # only match objects that satisfy threshold on l-infinity distance.
-    # do not match fake objects with locs = (0, 0)
-    dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
+    # drop matches with distance greater than slack
+    # do not match fake objects with locs = (0, 0) exactly
+    dist2 = (locs1[row_indx] - locs2[col_indx]).pow(2).sum(1).sqrt()
     origin_dist = torch.min(locs1[row_indx].pow(2).sum(1), locs2[col_indx].pow(2).sum(1))
-    cond1 = (dist < slack).bool()
+    cond1 = (dist2 < slack).bool()
     cond2 = (origin_dist > 0).bool()
     dist_keep = torch.logical_and(cond1, cond2)
-    avg_distance = dist[cond2].mean()  # average l-infinity distance over matched objects.
+    avg_distance = dist2[cond2].mean()  # average distance over matched objects.
     if dist_keep.sum() > 0:
-        assert dist[dist_keep].max() <= slack
+        assert dist2[dist_keep].max() <= slack
     return row_indx, col_indx, dist_keep, avg_distance
 
 
-def _compute_batch_tp_fp(truth: FullCatalog, est: FullCatalog) -> Tuple[Tensor, Tensor, Tensor]:
+def match_by_grade(
+    *,
+    locs1: Tensor,
+    locs2: Tensor,
+    fluxes1: Tensor,
+    fluxes2: Tensor,
+    slack: float = 2.0,
+    background: float = APERTURE_BACKGROUND,
+):
+    """Match objects based on centroids and flux."""
+    assert locs1.ndim == locs2.ndim == 2
+    assert locs1.shape[-1] == locs2.shape[-1] == 2
+    assert fluxes1.ndim == fluxes2.ndim == 1
+    assert torch.all((fluxes1 >= 0) | (fluxes1.abs() < APERTURE_BACKGROUND))
+    assert isinstance(locs1, torch.Tensor) and isinstance(locs2, torch.Tensor)
+    assert isinstance(fluxes1, torch.Tensor) and isinstance(fluxes2, torch.Tensor)
+
+    locs_diff = rearrange(locs1, "i xy -> i 1 xy") - rearrange(locs2, "i xy -> 1 i xy")
+    flux_diff = rearrange(fluxes1, "i -> i 1") - rearrange(fluxes2, "i -> 1 i")
+
+    dist1 = reduce(locs_diff.pow(2), "i j xy -> i j", "sum").sqrt()
+    inv_grade = 1 + flux_diff.abs() / (rearrange(fluxes1, "b -> b 1") + background)
+    err = torch.where(dist1 > slack, inv_grade.max() * 100, inv_grade)
+    row_indx, col_indx = sp_optim.linear_sum_assignment(err.detach().cpu())
+
+    # we match objects based on distance too.
+    # only match objects that satisfy threshold on l-infinity distance.
+    # do not match fake objects with locs = (0, 0) exactly
+    dist2 = (locs1[row_indx] - locs2[col_indx]).pow(2).sum(1).sqrt()
+    origin_dist = torch.min(locs1[row_indx].pow(2).sum(1), locs2[col_indx].pow(2).sum(1))
+    cond1 = (dist2 < slack).bool()
+    cond2 = (origin_dist > 0).bool()
+    dist_keep = torch.logical_and(cond1, cond2)
+    avg_distance = dist2[cond2].mean()
+    if dist_keep.sum() > 0:
+        assert dist2[dist_keep].max() <= slack
+    return row_indx, col_indx, dist_keep, avg_distance
+
+
+def compute_batch_tp_fp(
+    truth: FullCatalog,
+    est: FullCatalog,
+    *,
+    slack: float = 2.0,
+) -> Tuple[Tensor, Tensor, Tensor]:
     """Separate purpose from `DetectionMetrics`, since here we don't aggregate over batches."""
     all_tp = torch.zeros(truth.batch_size)
     all_fp = torch.zeros(truth.batch_size)
@@ -229,7 +115,7 @@ def _compute_batch_tp_fp(truth: FullCatalog, est: FullCatalog) -> Tuple[Tensor, 
         ntrue, nest = truth.n_sources[b].int().item(), est.n_sources[b].int().item()
         tlocs, elocs = truth.plocs[b], est.plocs[b]
         if ntrue > 0 and nest > 0:
-            _, mest, dkeep, _ = match_by_locs(tlocs, elocs)
+            _, mest, dkeep, _ = match_by_locs(tlocs, elocs, slack=slack)
             tp = len(elocs[mest][dkeep])
             fp = nest - tp
         elif ntrue > 0:
@@ -248,25 +134,29 @@ def _compute_batch_tp_fp(truth: FullCatalog, est: FullCatalog) -> Tuple[Tensor, 
     return all_tp, all_fp, all_ntrue
 
 
-def _compute_tp_fp_per_bin(
+def compute_tp_fp_per_bin(
     truth: FullCatalog,
     est: FullCatalog,
     param: str,
     bins: Tensor,
+    *,
+    slack: float = 2.0,
+    only_recall: bool = False,
 ) -> Dict[str, Tensor]:
     counts_per_bin: DefaultDict[str, Tensor] = defaultdict(
         lambda: torch.zeros(len(bins), truth.batch_size)
     )
     for ii, (b1, b2) in tqdm(enumerate(bins), desc="tp/fp per bin", total=len(bins)):
-        # precision
-        eparams = est.apply_param_bin(param, b1, b2)
-        tp, fp, _ = _compute_batch_tp_fp(truth, eparams)
-        counts_per_bin["tp_precision"][ii] = tp
-        counts_per_bin["fp_precision"][ii] = fp
+        if not only_recall:
+            # precision
+            eparams = est.apply_param_bin(param, b1, b2)
+            tp, fp, _ = compute_batch_tp_fp(truth, eparams, slack=slack)
+            counts_per_bin["tp_precision"][ii] = tp
+            counts_per_bin["fp_precision"][ii] = fp
 
         # recall
         tparams = truth.apply_param_bin(param, b1, b2)
-        tp, _, ntrue = _compute_batch_tp_fp(tparams, est)
+        tp, _, ntrue = compute_batch_tp_fp(tparams, est, slack=slack)
         counts_per_bin["tp_recall"][ii] = tp
         counts_per_bin["ntrue"][ii] = ntrue
 
@@ -281,7 +171,7 @@ def get_boostrap_precision_and_recall(
     bins: Tensor,
 ) -> Dict[str, Tensor]:
     """Get errors for precision/recall which need to be handled carefully to be efficient."""
-    counts_per_bin = _compute_tp_fp_per_bin(truth, est, param, bins)
+    counts_per_bin = compute_tp_fp_per_bin(truth, est, param, bins)
     batch_size = truth.batch_size
     n_bins = bins.shape[0]
 
@@ -312,240 +202,254 @@ def get_boostrap_precision_and_recall(
     return {"precision": precision_boot, "recall": recall_boot}
 
 
-def scene_metrics(
-    true_params: FullCatalog,
-    est_params: FullCatalog,
-    param: str,
-    p_min: float = 0,
-    p_max: float = torch.inf,
-    slack: float = 1.0,
-    disable_bar: bool = True,
-) -> dict:
-    """Return detection and classification metrics based on a given ground truth.
-
-    These metrics are computed as a function of `param` based on the specified
-    bin `(p_min, p_max)` but are designed to be independent of the estimated `param`.
-    Hence, precision is computed by taking a cut in the estimated parameters based on the `param`
-    bin and matching them with *any* true objects. Similarly, recall is computed by taking a cut
-    on the true parameters and matching them with *any* predicted objects.
-
-    Args:
-        true_params: True parameters of each source in the scene (e.g. from coadd catalog)
-        est_params: Predictions on scene obtained from predict_on_scene function.
-        param: Name of the parameter to make the cut on.
-        p_min: Discard all objects with `param` value lower than this.
-        p_max: Discard all objects with `param` value higher than this.
-        slack: Pixel L-infinity distance slack when doing matching for metrics.
-        disable_bar: Whether to use a progress bar when computing each batch in DetectionMetrics.
-
-    Returns:
-        Dictionary with output from DetectionMetrics, ClassificationMetrics.
-    """
-    detection_metrics = DetectionMetrics(slack, disable_bar=disable_bar)
-    classification_metrics = ClassificationMetrics(slack)
-
-    # precision
-    eparams = est_params.apply_param_bin(param, p_min, p_max)
-    detection_metrics.update(true_params, eparams)
-    precision = detection_metrics.compute()["precision"]
-    detection_metrics.reset()  # reset global state since recall and precision use different cuts.
-
-    # recall
-    tparams = true_params.apply_param_bin(param, p_min, p_max)
-    detection_metrics.update(tparams, est_params)
-    recall = detection_metrics.compute()["recall"]
-    n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
-    detection_metrics.reset()
-
-    # f1-score
-    f1 = 2 * precision * recall / (precision + recall)
-    detection_result = {
-        "precision": precision.item(),
-        "recall": recall.item(),
-        "f1": f1.item(),
-        "n_galaxies_detected": n_galaxies_detected.item(),
-    }
-
-    # classification
-    tparams = true_params.apply_param_bin(param, p_min, p_max)
-    classification_metrics.update(tparams, est_params)
-    classification_result = classification_metrics.compute()
-
-    # report counts on each bin
-    tparams = true_params.apply_param_bin(param, p_min, p_max)
-    eparams = est_params.apply_param_bin(param, p_min, p_max)
-    tcount = tparams.n_sources.sum().item()
-    tgcount = tparams["galaxy_bools"].sum().int().item()
-    tscount = tcount - tgcount
-
-    ecount = eparams.n_sources.sum().item()
-    egcount = eparams["galaxy_bools"].sum().int().item()
-    escount = ecount - egcount
-
-    n_matches = classification_result["n_matches"]
-    n_matches_gal_coadd = classification_result["n_matches_gal_coadd"]
-
-    counts = {
-        "tgcount": tgcount,
-        "tscount": tscount,
-        "egcount": egcount,
-        "escount": escount,
-        "n_matches_coadd_gal": n_matches_gal_coadd.item(),
-        "n_matches_coadd_star": n_matches.item() - n_matches_gal_coadd.item(),
-    }
-
-    # compute and return results
-    return {**detection_result, **classification_result, "counts": counts}
-
-
-def compute_bin_metrics(
-    truth: FullCatalog, pred: FullCatalog, param: str, bins: Tensor
-) -> Dict[str, Tensor]:
-    metrics_per_bin: dict = defaultdict(lambda: torch.zeros(len(bins)))
-    for ii, (b1, b2) in tqdm(enumerate(bins), desc="detection metrics per bin", total=len(bins)):
-        res = scene_metrics(truth, pred, param, b1, b2, slack=1.0, disable_bar=True)
-        metrics_per_bin["precision"][ii] = res["precision"]
-        metrics_per_bin["recall"][ii] = res["recall"]
-        metrics_per_bin["f1"][ii] = res["f1"]
-        metrics_per_bin["class_acc"][ii] = res["class_acc"]
-        conf_matrix = res["conf_matrix"]
-        metrics_per_bin["galaxy_acc"][ii] = conf_matrix[0, 0] / conf_matrix[0, :].sum().item()
-        metrics_per_bin["star_acc"][ii] = conf_matrix[1, 1] / conf_matrix[1, :].sum().item()
-        for k, v in res["counts"].items():
-            metrics_per_bin[k][ii] = v
-
-    return dict(metrics_per_bin)
-
-
-class CoaddFullCatalog(FullCatalog):
-    coadd_names = {
-        "objid": "objid",
-        "galaxy_bools": "galaxy_bool",
-        "fluxes": "flux",
-        "mags": "mag",
-        "ra": "ra",
-        "dec": "dec",
-    }
-    allowed_params = FullCatalog.allowed_params.union(coadd_names.keys())
-
-    @classmethod
-    def from_file(
-        cls, coadd_file: str, wcs: WCS, hlim: Tuple[int, int], wlim: Tuple[int, int], band="r"
-    ):
-        coadd_table = Table.read(coadd_file, format="fits")
-        return cls.from_table(coadd_table, wcs, hlim, wlim, band)
-
-    @classmethod
-    def from_table(
-        cls, cat, wcs: WCS, hlim: Tuple[int, int], wlim: Tuple[int, int], band: str = "r"
-    ):
-        """Load coadd catalog from file, add extra useful information, convert to tensors."""
-        # filter saturated objects
-        cat = cat[~cat["is_saturated"].data.astype(bool)]
-
-        # add additional useful columns to coadd catalog
-        x, y = wcs.all_world2pix(cat["ra"], cat["dec"], 0)
-        galaxy_bools = ~cat["probpsf"].data.astype(bool)
-        psfmag = cat[f"psfmag_{band}"] * cat["probpsf"]
-        galmag = cat[f"modelMag_{band}"] * (1 - cat["probpsf"])
-        mag = psfmag + galmag
-        cat["x"] = x
-        cat["y"] = y
-        cat["galaxy_bool"] = galaxy_bools
-        cat["mag"] = mag
-        cat["flux"] = convert_mag_to_flux(mag)
-        cat.replace_column("is_saturated", cat["is_saturated"].data.astype(bool))
-
-        # misclassified bright galaxies in PHOTO as galaxies (obtaind by eye)
-        misclass_ids = (8647475119820964111, 8647475119820964100, 8647475119820964192)
-        for iid in misclass_ids:
-            idx = np.where(cat["objid"] == iid)[0].item()
-            cat["galaxy_bool"][idx] = 0
-
-        # only return objects inside limits.
-        w, h = cat["x"], cat["y"]
-        keep = np.ones(len(cat)).astype(bool)
-        keep &= (h > hlim[0]) & (h < hlim[1])
-        keep &= (w > wlim[0]) & (w < wlim[1])
-        height = hlim[1] - hlim[0]
-        width = wlim[1] - wlim[0]
-        data = {}
-        h = torch.from_numpy(np.array(h).astype(np.float32)[keep])
-        w = torch.from_numpy(np.array(w).astype(np.float32)[keep])
-
-        # shift by +0.5 so it is consistent with BLISS parameters.
-        data["plocs"] = torch.stack((h - hlim[0], w - wlim[0]), dim=1).unsqueeze(0) + 0.5
-        data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
-
-        for bliss_name, coadd_name in cls.coadd_names.items():
-            arr = column_to_tensor(cat, coadd_name)[keep]
-            data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
-
-        data["galaxy_bools"] = data["galaxy_bools"].float()
-        data["star_fluxes"] = data["fluxes"] * (1 - data["galaxy_bools"])
-        return cls(height, width, data)
-
-
-def get_single_galaxy_ellipticities(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396, no_bar: bool = True
-) -> Tensor:
+def get_single_galaxy_ellipticities(images: Tensor, no_bar: bool = True) -> Tensor:
     """Returns ellipticities of (noiseless, single-band) individual galaxy images.
 
     Args:
-        pixel_scale: Conversion from arcseconds to pixel.
+        images: Array of shape (n, slen, slen) containing single galaxies with no noise/background.
         no_bar: Whether to use a progress bar.
-        images: Array of shape (n_samples, slen, slen) containing images of
-            single-centered galaxies without noise or background.
-        psf_image: Array of shape (slen, slen) containing PSF image used for
-            convolving the galaxies in `true_images`.
 
     Returns:
         Tensor containing ellipticity measurements for each galaxy in `images`.
     """
-    device = images.device
+    assert images.device == torch.device("cpu")
+    assert images.ndim == 3
     n_samples, _, _ = images.shape
     ellips = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
-    images_np = images.detach().cpu().numpy()
-    psf_np = psf_image.detach().cpu().numpy()
-    galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
+    images_np = images.numpy()
 
     # Now we use galsim to measure size and ellipticity
-    for i in tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
-        image = images_np[i]
-        galsim_image = galsim.Image(image, scale=pixel_scale)
-        res_true = galsim.hsm.EstimateShear(
-            galsim_image, galsim_psf_image, shear_est="KSB", strict=False
-        )
-        g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
-        ellips[i, :] = torch.tensor([g1, g2])
+    for ii in tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
+        image = images_np[ii]
+        if image.sum() > 0:  # skip empty images
+            galsim_image = galsim.Image(image, scale=PIXEL_SCALE)
+            # sigma ~ size of psf (in pixels)
+            out = galsim.hsm.FindAdaptiveMom(galsim_image, guess_sig=3, strict=False)
+            if not out.error_message:
+                e1 = float(out.observed_e1)
+                e2 = float(out.observed_e2)
+            else:
+                e1, e2 = float("nan"), float("nan")
+            ellips[ii, :] = torch.tensor([e1, e2])
+    return ellips
 
-    return ellips.to(device)
+
+def get_snr(noiseless: Tensor) -> Tensor:
+    """Compute SNR given noiseless, isolated images of galaxies and background."""
+    image_with_background = noiseless + BACKGROUND
+    snr2 = reduce(noiseless**2 / image_with_background, "b c h w -> b", "sum")
+    return torch.sqrt(snr2)
 
 
-def get_single_galaxy_measurements(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
-) -> Dict[str, Tensor]:
-    """Compute individual galaxy measurements comparing true images with reconstructed images.
+def get_blendedness(iso_image: Tensor, blend_image: Tensor) -> Tensor:
+    """Calculate blendedness.
 
     Args:
-        pixel_scale: Conversion from arcseconds to pixel.
-        images: Array of shape (n_samples, n_bands, slen, slen) containing images of
-            single-centered galaxies without noise or background.
-        psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for
-            convolving the galaxies in `true_images`.
+        iso_image: Array of shape = (B, N, C, H, W) corresponding to images of the isolated
+            galaxy you are calculating blendedness for (noiseless)
 
-    Returns:
-        Dictionary containing fluxes, magnitudes, and ellipticities of `images`.
+        blend_image: Array of shape = (B, C, H, W) corresponding to the blended image (noiseless).
+
     """
-    _, c, slen, w = images.shape
-    assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
-    images = rearrange(images, "n c h w -> (n c) h w")
-    psf_image = rearrange(psf_image, "c h w -> (c h) w")
-    fluxes = torch.sum(images, (1, 2))
-    ellips = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
+    assert iso_image.ndim == 5
+    num = reduce(iso_image * iso_image, "b s c h w -> b s", "sum")
+    blend = rearrange(blend_image, "b c h w -> b 1 c h w")
+    denom = reduce(blend * iso_image, "b s c h w -> b s", "sum")
+    blendedness = 1 - num / denom
+    return torch.where(blendedness.isnan(), 0, blendedness)
 
-    return {
-        "fluxes": fluxes,
-        "mags": convert_flux_to_mag(fluxes),
-        "ellips": ellips,
-    }
+
+def get_deblended_reconstructions(
+    cat: FullCatalog,
+    dec: CenteredGalaxyDecoder,
+    *,
+    slen: int,
+    device: torch.device,
+    batch_size: int = 100,
+    bp: int = 24,
+    tile_slen: int = 5,
+    no_bar: bool = True,
+):
+    """Return deblended galaxy reconstructions on prediction locations on a full size stamp."""
+    n_images = cat.batch_size
+    n_batches = math.ceil(n_images / batch_size)
+    image_size = slen + 2 * bp
+    recon_uncentered = torch.zeros((n_images, cat.max_n_sources, 1, image_size, image_size))
+
+    for jj in tqdm(range(cat.max_n_sources), desc="Obtaining reconstructions", disable=no_bar):
+        mask = torch.arange(cat.max_n_sources)
+        mask = mask[mask != jj]
+
+        # make a copy with all except one galaxy zeroed out
+        est_jj = FullCatalog(slen, slen, deepcopy(cat.to_dict()))
+        est_jj["galaxy_bools"][:, mask, :] = 0
+        est_jj["galaxy_bools"] = est_jj["galaxy_bools"].contiguous()
+
+        # will fail if catalog does nto come from encoder(s)
+        est_tiled_jj = est_jj.to_tile_params(tile_slen, ignore_extra_sources=False)
+
+        images_jj = []
+        for kk in range(n_batches):
+            start, end = kk * batch_size, (kk + 1) * batch_size
+            blocs = est_tiled_jj.locs[start:end].to(device)
+            bgparams = est_tiled_jj["galaxy_params"][start:end].to(device)
+            bgbools = est_tiled_jj["galaxy_bools"][start:end].to(device)
+
+            galaxy_tiles = render_galaxy_ptiles(
+                dec,
+                locs=blocs,
+                galaxy_params=bgparams,
+                galaxy_bools=bgbools,
+                tile_slen=tile_slen,
+            )
+
+            galaxy_images = reconstruct_image_from_ptiles(galaxy_tiles, tile_slen)
+            images_jj.append(galaxy_images.cpu())
+
+        images_jj = torch.concatenate(images_jj, axis=0)
+        recon_uncentered[:, jj, :, :, :] = images_jj
+
+    return recon_uncentered.to("cpu").contiguous()
+
+
+def get_residual_measurements(
+    cat: FullCatalog,
+    images: Tensor,
+    *,
+    paddings: Tensor,
+    sources: Tensor,
+    bp: int = 24,
+    r: float = 5.0,
+    no_bar: bool = True,
+) -> dict[Tensor]:
+    """Obtain aperture photometry fluxes for each source in the catalog."""
+    n_batches = cat.n_sources.shape[0]
+
+    fluxes = torch.zeros(n_batches, cat.max_n_sources, 1)
+    fluxerrs = torch.zeros(n_batches, cat.max_n_sources, 1)
+    snrs = torch.zeros(n_batches, cat.max_n_sources, 1)
+
+    ellips = torch.zeros(n_batches, cat.max_n_sources, 2)
+    sigmas = torch.zeros(n_batches, cat.max_n_sources, 1)
+
+    for ii in tqdm(range(n_batches), desc="Measuring galaxies", disable=no_bar):
+        n_sources = cat.n_sources[ii].item()
+        y = cat.plocs[ii, :, 0].numpy() + bp - 0.5
+        x = cat.plocs[ii, :, 1].numpy() + bp - 0.5
+
+        # obtain residual images for each galaxy to measure SNR
+        image = images[ii, 0] - paddings[ii, 0]
+        each_galaxy = sources[ii, :, 0]  # n h w
+        all_galaxies = rearrange(reduce(each_galaxy, "n h w -> h w", "sum"), "h w -> 1 h w")
+        other_galaxies = all_galaxies - each_galaxy
+        residual_images = rearrange(image, "h w -> 1 h w") - other_galaxies
+
+        _fluxes = []
+        _fluxerrs = []
+        _e1s = []
+        _e2s = []
+        _sigmas = []
+
+        for jj in range(n_sources):
+            target_img = residual_images[jj].numpy()
+
+            # measure fluxes with sep
+            f, ferr, _ = sep.sum_circle(
+                target_img, [x[jj]], [y[jj]], r=r, err=BACKGROUND.sqrt().item(), gain=1.0
+            )
+            _fluxes.append(f.item())
+            _fluxerrs.append(ferr.item())
+
+            # measure ellipticities and size with adaptive moments
+            _galsim_img = galsim.Image(target_img, scale=PIXEL_SCALE)
+            _centroid = galsim.PositionD(x=x[jj] + 1, y=y[jj] + 1)
+            out = galsim.hsm.FindAdaptiveMom(
+                _galsim_img, guess_centroid=_centroid, guess_sig=3, strict=False
+            )
+            if not out.error_message:
+                e1 = float(out.observed_e1)
+                e2 = float(out.observed_e2)
+                sigma = float(out.moments_sigma)
+            else:
+                e1 = float("nan")
+                e2 = float("nan")
+                sigma = float("nan")
+
+            _e1s.append(e1)
+            _e2s.append(e2)
+            _sigmas.append(sigma)
+
+        fluxes[ii, :n_sources, 0] = torch.tensor(_fluxes)
+        fluxerrs[ii, :n_sources, 0] = torch.tensor(_fluxerrs)
+        snrs[ii, :n_sources, 0] = fluxes[ii, :n_sources, 0] / fluxerrs[ii, :n_sources, 0]
+
+        ellips[ii, :n_sources, 0] = torch.tensor(_e1s)
+        ellips[ii, :n_sources, 1] = torch.tensor(_e2s)
+        sigmas[ii, :n_sources, 0] = torch.tensor(_sigmas)
+
+    return {"flux": fluxes, "fluxerr": fluxerrs, "snr": snrs, "ellips": ellips, "sigma": sigmas}
+
+
+def pred_in_batches(
+    pred_fnc: Callable,
+    images: Tensor,
+    *args,
+    device: torch.device,
+    batch_size: int = 200,
+    desc: str = "",
+    no_bar: bool = True,
+    axis=0,
+):
+    # gotta ensure model.forward outputs a dict of Tensors
+    n_images = images.shape[0]
+    n_batches = math.ceil(n_images / batch_size)
+    tiled_params_list = []
+    with torch.no_grad():
+        for ii in tqdm(range(n_batches), desc=desc, disable=no_bar):
+            start, end = ii * batch_size, (ii + 1) * batch_size
+            image_batch = images[start:end].to(device)
+            args_batch = (x[start:end].to(device) for x in args)
+            d = pred_fnc(image_batch, *args_batch)
+            d_cpu = {k: v.cpu() for k, v in d.items()}
+            tiled_params_list.append(d_cpu)
+
+    return collate(tiled_params_list, axis=axis)
+
+
+def get_sep_catalog(images: torch.Tensor, *, slen: float, bp: float) -> FullCatalog:
+    max_n_sources = 0
+    all_sep_params = []
+    for ii in range(images.shape[0]):
+        im = images[ii, 0].numpy()
+        bkg = sep.Background(im)
+        catalog = sep.extract(
+            im, err=bkg.globalrms, thresh=1.5, minarea=5, deblend_nthresh=32, deblend_cont=0.005
+        )
+
+        x1 = catalog["x"]
+        y1 = catalog["y"]
+
+        # need to ignore detected sources that are in the padding
+        in_padding = (
+            (x1 < bp - 0.5) | (x1 > bp + slen - 0.5) | (y1 < bp - 0.5) | (y1 > bp + slen - 0.5)
+        )
+
+        x = x1[np.logical_not(in_padding)]
+        y = y1[np.logical_not(in_padding)]
+
+        n = len(x)
+        max_n_sources = max(n, max_n_sources)
+
+        all_sep_params.append((n, x, y))
+
+    n_sources = torch.zeros((images.shape[0],)).long()
+    plocs = torch.zeros((images.shape[0], max_n_sources, 2))
+
+    for jj in range(images.shape[0]):
+        n, x, y = all_sep_params[jj]
+        n_sources[jj] = n
+
+        plocs[jj, :n, 0] = torch.from_numpy(y) - bp + 0.5
+        plocs[jj, :n, 1] = torch.from_numpy(x) - bp + 0.5
+
+    return FullCatalog(slen, slen, {"n_sources": n_sources, "plocs": plocs})

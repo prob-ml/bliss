@@ -1,75 +1,107 @@
-[tool.poetry]
-authors = [
-  "Ismael Mendoza <imendoza@umich.edu>",
-  "Runjing Liu",
-  "Derek Hansen",
-  "Yash Patel",
-  "Ziteng Pang",
-  "Zhe Zhao",
-  "Mallory Wang",
-  "Cheng Wang",
-  "Jeffrey Regier",
-]
+[project]
+authors = [{ name = "Ismael Mendoza", email = "imendoza@umich.edu" }]
 description = "Bayesian Light Source Separator"
-documentation = "https://prob-ml.github.io/bliss/"
-keywords = [
-  "cosmology",
-  "blending",
-  "weak lensing",
-  "bayesian",
-  "ml",
-  "pytorch",
-]
-license = "MIT"
-name = "bliss-deblender"
-packages = [{ include = "bliss" }]
+keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
+name = "bliss"
 readme = "README.md"
-repository = "https://github.com/prob-ml/bliss"
 version = "0.1.1"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "astropy>=6.0",
+  "blending-toolkit>=1.0.8",
+  "einops>=0.6.0",
+  "surveycodex>=1.2.0",
+  "matplotlib>=3.7.2",
+  "numpy>=1.25.2",
+  "scikit-learn>=1.3.0",
+  "scipy>=1.11.1",
+  "torch>=2.0.0",
+  "tensorboard>=2.16.2",
+  "typer>=0.15.1",
+  "sep>=1.4.0",
+  "pytorch-lightning>=2.2.1",
+  "jupyter>=1.0.0",
+  "nbstripout>=0.6.0",
+  "pytest>=8.0.0",
+  "tqdm>=4.66.2",
+  "pre-commit>=3.6.2",
+  "ruff >= 0.12.0",
+]
 
-[tool.poetry.dependencies]
-astropy = "^5.3"
-einops = "^0.6.1"
-galsim = "^2.4.10"
-hydra-core = "^1.3.2"
-matplotlib = "^3.7.2"
-nflows = "^0.14"
-numpy = "^1.25.2"
-python = "^3.10,<3.13"
-pytorch-lightning = "^2.0.6"
-scikit-learn = "^1.3.0"
-scipy = "^1.11.1"
-seaborn = "^0.12.2"
-torch = "^1.13.1"
-torchmetrics = "^1.0.1"
-sep = "^1.2.1"
-
-[tool.poetry.dev-dependencies]
-Cython = ">=0.29.21"
-black = "^23.7.0"
-flake8 = "^6.0.1"
-ipykernel = "^6.21.0"
-isort = "^5.9.3"
-jupyter = "^1.0.0"
-jupyter_contrib_nbextensions = "^0.7.0"
-nbstripout = "^0.6.0"
-plotly = "^5.15.0"
-pre-commit = "^3.3.3"
-pre-commit-hooks = "^4.4.0"
-pylint = "^2.17.0"
-pytest = "^7.4.0"
-pytest-cov = "^4.1.0"
-pytest-mypy = "^0.10.3"
-tqdm = "^4.65.0"
-wemake-python-styleguide = "^0.18.0"
+[tool.setuptools]
+packages = ["bliss", "bliss.datasets", "bliss.encoders", "experiment"]
 
 [build-system]
-build-backend = "poetry.core.masonry.api"
-requires = ["poetry-core>=1.0.0"]
+requires      = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
 
-[tool.black]
-line-length = 100
-target-version = ['py310']
+[tool.ruff]
+fix = true
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".ipynb_checkpoints",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "site-packages",
+  "venv",
+]
+
+# Same as Black.
+line-length  = 100
+indent-width = 4
+
+# Assume Python 3.12
+target-version = "py312"
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+exclude = ["*.ipynb"]
+
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "SIM", "PLE", "PLC", "PLW", "RUF"]
+ignore = [
+  "C901",    # I want to decide what is 'too' complex
+  "E501",    # I don't care about formatting docstrings
+  "E731",    # I like lambda's sometimes
+  "PLC0206", # too picky, not always useful
+  "RUF027",  # does not account for shell scripts correctly
+  "RUF052",  # I find underscore variables useful
+]
+preview = true
+exclude = ["*.ipynb", "scripts/one_galaxy_shear.py", "scripts/benchmarks/*.py"]
+
 
 # pyproject.toml
 [tool.pytest.ini_options]
@@ -82,6 +114,7 @@ filterwarnings = [
   "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
   "ignore:.*distutils Version classes are deprecated.*:DeprecationWarning",
   "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
+  "ignore:.*Calling from_dlpack with a DLPack tensor is deprecated.",
 ]
 minversion = "6.0"
 testpaths = ["tests"]

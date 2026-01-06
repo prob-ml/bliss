@@ -6,9 +6,9 @@ name: tests
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 jobs:
   build:
@@ -19,58 +19,28 @@ jobs:
         python-version: ["3.10"]
 
     steps:
-      - name: Checkout github repo (+ download lfs dependencies)
-        uses: actions/checkout@v3
+      - name: Checkout github repo
+        uses: actions/checkout@v4
+
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
         with:
-          lfs: true
-
-      - name: Install poetry
-        run: pipx install poetry
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "poetry"
-
-      - name: Create environment variables
-        run: |
-          echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-          echo "JUPYTER_PLATFORM_DIRS=1" >> $GITHUB_ENV
+          python-version: "3.10"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
 
-      - name: Install poetry dependencies
-        run: |
-          poetry install
+      - name: Install the project
+        run: uv sync --all-extras --dev
 
-      - name: Run black
+      - name: Run ruff
         run: |
-          poetry run black --check .
-
-      - name: Run flake8
-        run: |
-          poetry run flake8 bliss/ tests/
-
-      - name: Run mypy
-        run: |
-          env MYPYPATH=typings poetry run mypy --ignore-missing-imports bliss
-
-      - name: Run pylint
-        run: |
-          poetry run pylint bliss/ tests/
+          uv run ruff check --output-format=github bliss/
 
       - name: Run Tests
         run: |
-          poetry run pytest --cov=./bliss --cov-report=xml --durations=0
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          flags: unittests
-          env_vars: OS,PYTHON
-          name: codecov-umbrella
-          fail_ci_if_error: true
+          export BLISS_DATA_DIR="/home/runner/work/bliss/bliss/data/"
+          uv run pytest tests

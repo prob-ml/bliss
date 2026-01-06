@@ -9,20 +9,21 @@ def test_multiple_sources_one_tile():
         "n_sources": torch.tensor([2]),
         "plocs": torch.tensor([[0.5, 0.5], [0.6, 0.6]]).reshape(1, 2, 2),
         "galaxy_bools": torch.tensor([1, 1]).reshape(1, 2, 1),
+        "fluxes": torch.tensor([1, 2]).reshape(1, 2, 1),
     }
     full_cat = FullCatalog(2, 2, d)
 
     with pytest.raises(ValueError) as error_info:
-        full_cat.to_tile_params(1, 1, ignore_extra_sources=False)
-    assert error_info.value.args[0] == "# of sources per tile exceeds `max_sources_per_tile`."
+        full_cat.to_tile_params(1, ignore_extra_sources=False)
+        assert error_info.value.args[0] == "# of sources per tile exceeds `max_sources_per_tile`."
 
-    # should return only first source in first tile.
-    tile_cat = full_cat.to_tile_params(1, 1, ignore_extra_sources=True)
+    # should only return the brightest source in the first tile
+    tile_cat = full_cat.to_tile_params(1, ignore_extra_sources=True)
     assert torch.equal(tile_cat.n_sources, torch.tensor([[1, 0], [0, 0]]).reshape(1, 2, 2))
     assert torch.equal(
-        tile_cat.locs, torch.tensor([[[0.5, 0.5], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 1, 2)
+        tile_cat["galaxy_bools"],
+        torch.tensor([[[1.0], [0.0]], [[0.0], [0.0]]]).reshape(1, 2, 2, 1),
     )
     assert torch.equal(
-        tile_cat["galaxy_bools"],
-        torch.tensor([[[1.0], [0.0]], [[0.0], [0.0]]]).reshape(1, 2, 2, 1, 1),
+        tile_cat.locs, torch.tensor([[[0.6, 0.6], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 2)
     )

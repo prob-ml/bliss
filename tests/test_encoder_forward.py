@@ -1,89 +1,51 @@
+"""Test that we can run one loop of encoder training."""
+
 import torch
+from astropy.table import Table
+from torch.utils.data import DataLoader
 
-from bliss.models.detection_encoder import DetectionEncoder, LogBackgroundTransform
+from bliss.datasets.generate_blends import generate_dataset
+from bliss.datasets.io import save_dataset_npz
+from bliss.datasets.lsst import get_default_lsst_psf
+from bliss.datasets.padded_tiles import generate_padded_tiles
+from bliss.datasets.saved_datasets import SavedGalsimBlends, SavedPtiles
+from bliss.datasets.table_utils import column_to_tensor
+from bliss.encoders.binary import BinaryEncoder
+from bliss.encoders.deblend import GalaxyEncoder
+from bliss.encoders.detection import DetectionEncoder
 
 
-class TestSourceEncoder:
-    def test_variational_mode(self, devices):
-        """Tests forward function of source encoder.
+def test_encoder_forward(home_dir, tmp_path):
+    ae_state_dict = home_dir / "experiment" / "models" / "autoencoder_52.pt"
 
-        Arguments:
-            devices: GPU device information.
-        """
-        device = devices.device
+    catsim_table = Table.read(home_dir / "data" / "small_cat.fits")
+    all_star_mags = column_to_tensor(
+        Table.read(home_dir / "data" / "stars_med_june2018.fits"), "i_ab"
+    )
+    psf = get_default_lsst_psf()
 
-        batch_size = 2
-        n_tiles_h = 3
-        n_tiles_w = 5
-        max_detections = 4
-        ptile_slen = 10
-        n_bands = 2
-        tile_slen = 2
-        background = (10.0, 20.0)
+    ds = generate_dataset(10, catsim_table, all_star_mags, psf, max_n_sources=10)
+    padded_ds = generate_padded_tiles(10, catsim_table, all_star_mags, psf)
 
-        # get encoder
-        star_encoder: DetectionEncoder = DetectionEncoder(
-            LogBackgroundTransform(),
-            channel=8,
-            dropout=0,
-            spatial_dropout=0,
-            hidden=64,
-            ptile_slen=ptile_slen,
-            tile_slen=tile_slen,
-            n_bands=n_bands,
-            max_detections=max_detections,
-        ).to(device)
+    ds_path = tmp_path / "train_ds.npz"
+    ptiles_ds_path = tmp_path / "train_ds_ptiles.npz"
+    save_dataset_npz(ds, ds_path)
+    save_dataset_npz(padded_ds, ptiles_ds_path)
 
-        with torch.no_grad():
-            star_encoder.eval()
+    saved_ds1 = SavedGalsimBlends(ds_path)
+    saved_ds2 = SavedPtiles(ptiles_ds_path)
 
-            # simulate image padded tiles
-            images = torch.randn(
-                batch_size,
-                n_bands,
-                ptile_slen + (n_tiles_h - 1) * tile_slen,
-                ptile_slen + (n_tiles_w - 1) * tile_slen,
-                device=device,
-            )
+    dl1 = DataLoader(saved_ds1, batch_size=32, num_workers=0)
+    dl2 = DataLoader(saved_ds2, batch_size=32, num_workers=0)
 
-            background_tensor = torch.tensor(background, device=device)
-            background_tensor = background_tensor.reshape(1, -1, 1, 1).expand(*images.shape)
+    binary_encoder = BinaryEncoder()
+    detection_encoder = DetectionEncoder()
+    galaxy_encoder = GalaxyEncoder(ae_state_dict)
 
-            images *= background_tensor.sqrt()
-            images += background_tensor
-            batch = {"images": images, "background": background_tensor}
+    with torch.no_grad():
+        for b in dl1:
+            detection_encoder.get_loss(b["images"], b["n_sources"], b["locs"])
+            binary_encoder.get_loss(b["images"], b["n_sources"], b["locs"], b["galaxy_bools"])
 
-            var_params = star_encoder.encode_batch(batch)
-            catalog = star_encoder.variational_mode(var_params)
-
-            assert catalog["n_sources"].size() == torch.Size([batch_size * n_tiles_h * n_tiles_w])
-            correct_locs_shape = torch.Size([batch_size * n_tiles_h * n_tiles_w, max_detections, 2])
-            assert catalog["locs"].shape == correct_locs_shape
-
-    def test_sample(self, devices):
-        ptile_slen = 10
-        n_bands = 2
-        tile_slen = 2
-        n_samples = 5
-        background = (10.0, 20.0)
-        background_tensor = torch.tensor(background).view(1, -1, 1, 1).to(devices.device)
-
-        images = torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(devices.device)
-        images = images * background_tensor.sqrt() + background_tensor
-        background_tensor = background_tensor.expand(*images.shape)
-
-        star_encoder = DetectionEncoder(
-            LogBackgroundTransform(),
-            channel=8,
-            dropout=0,
-            spatial_dropout=0,
-            hidden=64,
-            ptile_slen=ptile_slen,
-            tile_slen=tile_slen,
-            n_bands=n_bands,
-            max_detections=4,
-        ).to(devices.device)
-
-        batch = {"images": images, "background": background_tensor}
-        var_params = star_encoder.encode_batch(batch)
-        star_encoder.sample(var_params, n_samples)
+        for b in dl2:
+            galaxy_encoder.get_loss(b["images"], b["centered"], b["locs"])
