@@ -16,10 +16,10 @@ from torch import Tensor
 CB_color_cycle = [
     "#377eb8",
     "#ff7f00",
+    "#984ea3",
     "#4daf4a",
     "#f781bf",
     "#a65628",
-    "#984ea3",
     "#999999",
     "#e41a1c",
     "#dede00",
@@ -27,7 +27,7 @@ CB_color_cycle = [
 
 c1 = "#1b9e77"
 c2 = "#7570b3"
-c3 = "#d95f02"
+c3 = "#f781bf"
 CLR_CYCLE = [c1, c2, c3]
 
 
