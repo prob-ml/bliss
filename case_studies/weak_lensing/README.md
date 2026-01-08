@@ -7,13 +7,13 @@ In this case study, we use neural posterior estimation to infer tomographic shea
 To train the encoder on DC2 images, run
 
 ```
-nohup bliss -cp <path>/bliss/case_studies/weak_lensing/dc2 -cn config_dc2.yaml mode=train &> train_on_dc2.out &
+nohup bliss -cp <path>/bliss/case_studies/weak_lensing/dc2 -cn config_train_npe.yaml mode=train &> train_on_dc2.out &
 ```
 
 To train the encoder on descwl-shear-sims images, run
 
 ```
-nohup bliss -cp <path>/bliss/case_studies/weak_lensing/descwl -cn config_descwl.yaml mode=train &> train_on_descwl.out &
+nohup bliss -cp <path>/bliss/case_studies/weak_lensing/descwl -cn config_train_npe.yaml mode=train &> train_on_descwl.out &
 ```
 
-See `dc2/notebooks` and `descwl/notebooks` for some exploratory plots and our most recent results.
+See `dc2/results`, `dc2/exploratory`, `descwl/results`, and `descwl/exploratory` for analysis notebooks and results.

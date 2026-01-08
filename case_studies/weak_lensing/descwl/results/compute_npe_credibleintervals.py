@@ -4,7 +4,7 @@
 Usage:
     python compute_npe_credibleintervals.py
 
-Configure settings in npe_credibleintervals_config.yaml
+Configure settings in config_compute_npe_credibleintervals.yaml
 """
 
 import concurrent.futures
@@ -30,7 +30,7 @@ if bliss_root not in sys.path:
 
 def load_config():
     config_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "npe_credibleintervals_config.yaml"
+        os.path.dirname(os.path.abspath(__file__)), "config_compute_npe_credibleintervals.yaml"
     )
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -43,8 +43,10 @@ def main():
     print(f"Using device: {device}")
 
     # Initialize hydra config
-    with initialize(config_path=".", version_base=None):
-        hydra_cfg = compose("config_descwl", overrides=[f"train.pretrained_weights={cfg['ckpt']}"])
+    with initialize(config_path="../", version_base=None):
+        hydra_cfg = compose(
+            "config_train_npe", overrides=[f"train.pretrained_weights={cfg['ckpt']}"]
+        )
 
     seed = pl.seed_everything(hydra_cfg.train.seed)
     GlobalEnv.seed_in_this_program = seed
