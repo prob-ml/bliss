@@ -2,7 +2,7 @@
 ckpt: /data/scratch/descwl/checkpoints/trained_encoder_descwl_setting1.ckpt
 
 # Output file path
-output: notebooks/npe_credible_intervals_setting1.pt
+output: npe_credible_intervals_setting1.pt
 
 # Number of files to process per GPU batch (reduce if OOM)
 files_per_chunk: 16
