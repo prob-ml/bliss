@@ -1,5 +1,5 @@
 # Path to trained model checkpoint
-ckpt: /data/scratch/descwl/checkpoints/trained_encoder_descwl_setting1.ckpt
+ckpt: /nfs/turbo/lsa-regier/scratch/descwl/checkpoints/trained_encoder_descwl_setting1.ckpt
 
 # Output file path
 output: npe_credible_intervals_setting1.pt
