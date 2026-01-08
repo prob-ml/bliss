@@ -1,6 +1,6 @@
 # Input/Output paths
 input_dir: '/nfs/turbo/lsa-regier/scratch/descwl/setting1'
-output_file: 'anacal_results_setting1.pt'
+output_file: 'results/anacal_results_setting1.pt'
 
 # Processing range (optional)
 start_idx: 0
