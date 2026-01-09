@@ -12,7 +12,7 @@ Configure settings in config_run_anacal.yaml
 import os
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 
 import anacal
@@ -308,9 +308,10 @@ def main():
         print(f"Using {n_workers} workers...")
         args_list = [(f, cfg) for f in test_files]
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
-            futures = {executor.submit(process_file, args): args[0] for args in args_list}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing"):
-                file_results, error = future.result()
+            # Use map() to preserve order (as_completed returns in completion order)
+            for file_results, error in tqdm(
+                executor.map(process_file, args_list), total=len(args_list), desc="Processing"
+            ):
                 if error:
                     print(f"Error: {error}")
                     failed_count += 1
