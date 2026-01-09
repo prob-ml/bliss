@@ -32,9 +32,8 @@ data/dc2/merged_catalog
 case_studies/sdss_galaxies/models/simulated_blended_galaxies.pt
 case_studies/*/data/
 venv
-nohup.out
+*.out
 multirun
-DC2_*.out
 input_images/
 Results*
 case_studies/weak_lensing/**/*.pt
