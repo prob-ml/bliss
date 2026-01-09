@@ -126,10 +126,10 @@ def main():
             results["shear2_true"].append(shear2)
             results["shear1_posteriormean"].append(x[:, 0].cpu())
             results["shear2_posteriormean"].append(x[:, 2].cpu())
-            results["shear1_ci_lower"].append((x[:, 0] - ci_quantiles * std1.unsqueeze(1)).cpu())
-            results["shear1_ci_upper"].append((x[:, 0] + ci_quantiles * std1.unsqueeze(1)).cpu())
-            results["shear2_ci_lower"].append((x[:, 2] - ci_quantiles * std2.unsqueeze(1)).cpu())
-            results["shear2_ci_upper"].append((x[:, 2] + ci_quantiles * std2.unsqueeze(1)).cpu())
+            results["shear1_ci_lower"].append((x[:, 0:1] - ci_quantiles * std1.unsqueeze(1)).cpu())
+            results["shear1_ci_upper"].append((x[:, 0:1] + ci_quantiles * std1.unsqueeze(1)).cpu())
+            results["shear2_ci_lower"].append((x[:, 2:3] - ci_quantiles * std2.unsqueeze(1)).cpu())
+            results["shear2_ci_upper"].append((x[:, 2:3] + ci_quantiles * std2.unsqueeze(1)).cpu())
 
             del images, inputs, x, chunk_data
 
