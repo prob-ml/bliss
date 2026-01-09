@@ -384,6 +384,7 @@ source = { editable = "." }
 dependencies = [
     { name = "anacal" },
     { name = "astropy" },
+    { name = "camb" },
     { name = "colossus" },
     { name = "einops" },
     { name = "galsim" },
@@ -392,6 +393,7 @@ dependencies = [
     { name = "lsstdesc-gcr-catalogs" },
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "pyccl" },
     { name = "pyvo" },
     { name = "reproject" },
     { name = "requests" },
@@ -400,6 +402,7 @@ dependencies = [
     { name = "torchmetrics" },
     { name = "torchvision", version = "0.24.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "python_full_version < '3.15' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
     { name = "torchvision", version = "0.24.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "python_full_version >= '3.15' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
+    { name = "treecorr" },
 ]
 
 [package.optional-dependencies]
@@ -432,6 +435,7 @@ dev = [
 requires-dist = [
     { name = "anacal", specifier = ">=0.7.3" },
     { name = "astropy", specifier = ">=6.1.1" },
+    { name = "camb", specifier = ">=1.6.5" },
     { name = "colossus", specifier = ">=1.3.5" },
     { name = "einops", specifier = ">=0.8.0" },
     { name = "galsim", specifier = ">=2.4.10" },
@@ -451,6 +455,7 @@ requires-dist = [
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=2.9.2" },
     { name = "pre-commit-hooks", marker = "extra == 'dev'", specifier = ">=4.4.0" },
     { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15.0.0" },
+    { name = "pyccl", specifier = ">=3.2.1" },
     { name = "pypandoc", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=2.10" },
@@ -469,8 +474,29 @@ requires-dist = [
     { name = "torchmetrics", specifier = ">=1.4.0.post0" },
     { name = "torchvision", specifier = ">=0.22.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm", marker = "extra == 'dev'", specifier = ">=4.62.3" },
+    { name = "treecorr", specifier = ">=5.1.2" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "camb"
+version = "1.6.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "scipy" },
+    { name = "sympy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/06/92e52a466195a97d26dafba1c4197e753a724793cb2b4a34800e975e3ab3/camb-1.6.5.tar.gz", hash = "sha256:402c14e76faf541a383bdc5a0fcc56e5d8fdf1636fc9a8fa082ab0fa8a0c4a05", size = 796973, upload-time = "2025-11-10T14:25:25.421Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/42/13/5aa1b8ea0812cda841215ed2773765bbc0b2ae50bb44314fca4c86e6fb05/camb-1.6.5-py3-none-macosx_13_0_arm64.whl", hash = "sha256:b417bab6e014048e3df2db6a182af6383dad42e7b10b616db047fefd95d1c636", size = 1327857, upload-time = "2025-11-10T14:25:10.49Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/92/d833a4bc27d4efcb9bcc92295ce6f8c11da9c44b755b92003fb092d00920/camb-1.6.5-py3-none-macosx_13_0_x86_64.whl", hash = "sha256:e53b7a1b212a6f77ffe2d5e12e3f5fd19d0897152d92fce62ab1b9d65225135d", size = 1373676, upload-time = "2025-11-10T14:25:12.462Z" },
+    { url = "https://files.pythonhosted.org/packages/62/54/52749d8d59e864e3e5f4bbfd98069b918521f4d37159b60f8a3c2e10805f/camb-1.6.5-py3-none-macosx_14_0_arm64.whl", hash = "sha256:3130246d5ed8eaf4bfa614e9870710837d070b48820bcd435cd563ddedba2a23", size = 1327912, upload-time = "2025-11-10T14:25:13.727Z" },
+    { url = "https://files.pythonhosted.org/packages/31/2e/d420bc44bb3915e28287fa1016c8b7d8dd5e89b510314949bd7aef0cb9e2/camb-1.6.5-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:64c92fd9d38a8ae7e40a3a28c61b4ac3cbc8df6ece10bc703348d50e6d013d64", size = 1587695, upload-time = "2025-11-10T14:25:15.251Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/f6/659bd4eea67afc4b5584fc77bc50f8f7160cca70555ec03c2f20d9e63e7d/camb-1.6.5-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:32851453fc0ff45d283bca6012d43ca38a0eee19faa90a4833d2d8202b4c265f", size = 2351425, upload-time = "2025-11-10T14:25:17.985Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/78/471218a4b457fc14cf0f0a628b2ba305a5a19108c8640e2cbcc2f7fb8937/camb-1.6.5-py3-none-win_amd64.whl", hash = "sha256:dc98ded515040ca2b26309ac2092c8fadddd024f2f38c99db30fc991e330bca0", size = 1484895, upload-time = "2025-11-10T14:25:19.349Z" },
+]
 
 [[package]]
 name = "certifi"
@@ -3211,12 +3237,21 @@ wheels = [
 
 [[package]]
 name = "pybind11"
-version = "3.0.1"
+version = "2.13.6"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/2f/7b/a6d8dcb83c457e24a9df1e4d8fd5fb8034d4bbc62f3c324681e8a9ba57c2/pybind11-3.0.1.tar.gz", hash = "sha256:9c0f40056a016da59bab516efb523089139fcc6f2ba7e4930854c61efb932051", size = 546914, upload-time = "2025-08-22T20:09:27.265Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/c1/72b9622fcb32ff98b054f724e213c7f70d6898baa714f4516288456ceaba/pybind11-2.13.6.tar.gz", hash = "sha256:ba6af10348c12b24e92fa086b39cfba0eff619b61ac77c406167d813b096d39a", size = 218403, upload-time = "2024-09-14T00:35:22.606Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cd/8a/37362fc2b949d5f733a8b0f2ff51ba423914cabefe69f1d1b6aab710f5fe/pybind11-3.0.1-py3-none-any.whl", hash = "sha256:aa8f0aa6e0a94d3b64adfc38f560f33f15e589be2175e103c0a33c6bce55ee89", size = 293611, upload-time = "2025-08-22T20:09:25.235Z" },
+    { url = "https://files.pythonhosted.org/packages/13/2f/0f24b288e2ce56f51c920137620b4434a38fd80583dbbe24fc2a1656c388/pybind11-2.13.6-py3-none-any.whl", hash = "sha256:237c41e29157b962835d356b370ededd57594a26d5894a795960f0047cb5caf5", size = 243282, upload-time = "2024-09-14T00:35:20.361Z" },
 ]
+
+[[package]]
+name = "pyccl"
+version = "3.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/eb/c1/947de68acf4cf908766094f14464fd093cfb607d55006ddcbd9526d04c20/pyccl-3.2.1.tar.gz", hash = "sha256:40c3556791bc7ae9ce32c2ad663998f145c5ace883557b2c9cd8c234b54bd383", size = 16827337, upload-time = "2025-06-10T19:31:22.953Z" }
 
 [[package]]
 name = "pycparser"
@@ -4385,6 +4420,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/eb/79/72064e6a701c2183016abbbfedaba506d81e30e232a68c9f0d6f6fcd1574/traitlets-5.14.3.tar.gz", hash = "sha256:9ed0579d3502c94b4b3732ac120375cda96f923114522847de4b3bb98b96b6b7", size = 161621, upload-time = "2024-04-19T11:11:49.746Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/00/c0/8f5d070730d7836adc9c9b6408dec68c6ced86b304a9b26a14df072a6e8c/traitlets-5.14.3-py3-none-any.whl", hash = "sha256:b74e89e397b1ed28cc831db7aea759ba6640cb3de13090ca145426688ff1ac4f", size = 85359, upload-time = "2024-04-19T11:11:46.763Z" },
+]
+
+[[package]]
+name = "treecorr"
+version = "5.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lsstdesc-coord" },
+    { name = "numpy" },
+    { name = "pybind11" },
+    { name = "pyyaml" },
+    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/24/f3/5d538aa71b6c6b667790c5cd83d316b1cb84c25e2f3f9678620e09ca2175/treecorr-5.1.2.tar.gz", hash = "sha256:34c87397dac263bb1f8360aa5e508b17ddfa9dda406fa694df589a9eedafe02b", size = 1142828, upload-time = "2025-07-24T01:33:10.882Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/dd/976600d741b336e241895f26f1b43cee2b49c91de930f673b979751e4b66/treecorr-5.1.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:c16ec87ace29ca07aaad00ba388f946dc2fbd865a7a79e7a2c1e15b510a3a9a1", size = 1565407, upload-time = "2025-07-24T01:32:43.785Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/3e/48046bc8a9e8887f9fffc27cd22640ed72d08e16113b7ab0cc2b01a83ba9/treecorr-5.1.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b0f0a0d595301418eb266a46bfa18f4dd0f583fac720e585d7006155405cce40", size = 19394595, upload-time = "2025-07-24T01:32:45.979Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/15/9e90f7d5c3b5d9f2f14ea92307fb47a62ad7baaf2de44c14b91202cbdee9/treecorr-5.1.2-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:7266a00219236917850d6737b6318993d02bead64ed770166a5ec616e1b4f30c", size = 18445012, upload-time = "2025-07-24T01:32:48.268Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/64/749a658ea7a80921878b3d979dd23f3d98a161c1bf3f2967b83438423f78/treecorr-5.1.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:cda7372367b204e78c55d02bf0694e97195256497b75b51738d870d148ad4517", size = 1565449, upload-time = "2025-07-24T01:32:50.335Z" },
+    { url = "https://files.pythonhosted.org/packages/30/f4/41e83d4b0f6bc55bf0858d9b443ae466ae4f97600b46091ed3f038f1786d/treecorr-5.1.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:87ec928a50e8985797c15627dffe1e7a67993e530200152c38e32845065f6201", size = 19392626, upload-time = "2025-07-24T01:32:52.337Z" },
+    { url = "https://files.pythonhosted.org/packages/df/f9/a01e5e1dbdca457cc590cf5d86d1fe0c3fc5319b5502a15d702e189891fd/treecorr-5.1.2-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:0991654542f4d9b30231c22ab45553303e33da03258837805c499ff8585ba1da", size = 18436986, upload-time = "2025-07-24T01:32:54.959Z" },
 ]
 
 [[package]]
