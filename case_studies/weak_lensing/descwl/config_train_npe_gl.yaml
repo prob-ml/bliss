@@ -11,23 +11,26 @@ hydra:
         dir: .
 
 paths:
-    cached_data: /data/scratch/descwl/weak_lensing_img2048_WLD_80_star_max_100_draw_bright_with_filter_varying_shear
-    output: /home/twhit/bliss
+    cached_data: /nfs/turbo/lsa-regier/scratch/descwl/setting1
+    output: /scratch/regier_root/regier1/twhit/bliss
 
 cached_simulator:
-    _target_: bliss.cached_dataset.CachedSimulatedDataModule
+    _target_: case_studies.weak_lensing.cached_dataset.CachedSimulatedDataModule
     batch_size: 1
-    splits: 0:70/70:80/80:100
+    splits: 0:2000/2000:4000/4000:14000
+    splits_type: count
     num_workers: 1
     cached_data_path: ${paths.cached_data}
-    train_transforms: []
-    nontrain_transforms: []
+    train_transforms:
+        - _target_: case_studies.weak_lensing.data_augmentation.RemoveAnacalData
+    nontrain_transforms:
+        - _target_: case_studies.weak_lensing.data_augmentation.RemoveAnacalData
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: case_studies.weak_lensing.variational_dist.NormalFactor
     name: shear_1
     nll_gating: null
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: case_studies.weak_lensing.variational_dist.NormalFactor
     name: shear_2
     nll_gating: null
 
@@ -45,20 +48,11 @@ lensing_plots:
     save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
 
 encoder:
-    _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
+    _target_: case_studies.weak_lensing.encoder.ScalarShearEncoder
     n_bands: 3
-    res_init: 2048  # num pixels per side
-    res_midpoint: 128
-    res_final: 1  # num tiles per side
-    ch_init: 64
-    ch_max: 512
-    ch_final: 128
-    initial_downsample: true
-    more_up_layers: false
-    num_bottleneck_layers: 0
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
-        _target_: bliss.encoder.variational_dist.VariationalDist
+        _target_: case_studies.weak_lensing.variational_dist.VariationalDist
         tile_slen: 2048
         factors: ${variational_factors}
     optimizer_params:
@@ -88,7 +82,7 @@ train:
         logger:
             _target_: pytorch_lightning.loggers.TensorBoardLogger
             save_dir: ${paths.output}
-            name: WeakLensingResultsDescwl
+            name: ResultsDescwl
             version: ${now:%Y-%m-%d_%H-%M}
             default_hp_metric: false
         reload_dataloaders_every_n_epochs: 0

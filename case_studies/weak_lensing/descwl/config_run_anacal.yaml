@@ -1,0 +1,15 @@
+# AnaCal configuration for descwl
+# Uses NPE's test set via config_train_npe.yaml (same seed for identical split)
+
+output_file: results/anacal_results_setting1.pt
+n_workers: 28  # Number of parallel workers (1 = sequential)
+
+# AnaCal FPFS parameters
+npix: 64
+sigma_arcsec: 0.52
+mag_zero: 30.0
+pixel_scale: 0.2
+
+# Band combination
+combine_method: inverse_variance
+mask_combine_method: union
