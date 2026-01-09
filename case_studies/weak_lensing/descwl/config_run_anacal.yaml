@@ -1,20 +1,15 @@
-# Input/Output paths
-input_dir: '/nfs/turbo/lsa-regier/scratch/descwl/setting1'
-output_file: 'results/anacal_results_setting1.pt'
+# AnaCal configuration for descwl
+# Uses NPE's test set via config_train_npe.yaml (same seed for identical split)
 
-# Processing range (optional)
-start_idx: 0
-end_idx: null  # null = process all files
+output_file: results/anacal_results_setting1.pt
+n_workers: 28  # Number of parallel workers (1 = sequential)
 
-# Processing options
-checkpoint_interval: 50  # Save checkpoint every N images (0 to disable)
-n_workers: 28            # Number of parallel workers (1 = sequential)
-verbose: false
+# AnaCal FPFS parameters
+npix: 64
+sigma_arcsec: 0.52
+mag_zero: 30.0
+pixel_scale: 0.2
 
-# AnaCal parameters
-npix: 64                          # PSF cutout size
-sigma_arcsec: 0.52                # Gaussian smoothing sigma
-mag_zero: 30.0                    # Zero point magnitude
-pixel_scale: 0.2                  # Arcsec per pixel
-combine_method: 'inverse_variance'  # Band combination: 'inverse_variance' or 'mean'
-mask_combine_method: 'union'        # Mask combination: 'union', 'first_only', or 'intersection'
+# Band combination
+combine_method: inverse_variance
+mask_combine_method: union
