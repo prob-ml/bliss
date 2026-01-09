@@ -1,0 +1,14 @@
+# Path to trained model checkpoint
+ckpt: /nfs/turbo/lsa-regier/scratch/descwl/checkpoints/trained_encoder_descwl_setting1.ckpt
+
+# Output file path
+output: npe_credible_intervals_setting1.pt
+
+# Number of files to process per GPU batch (reduce if OOM)
+files_per_chunk: 16
+
+# GPU device
+device: cuda:0
+
+# Number of parallel file loading threads
+num_workers: 4

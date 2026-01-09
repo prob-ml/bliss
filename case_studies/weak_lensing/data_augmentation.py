@@ -3,6 +3,13 @@ import random
 import torch
 
 
+class RemoveAnacalData:
+    """Remove anacal_data field from batch to avoid collation errors with None values."""
+
+    def __call__(self, datum):
+        return {k: v for k, v in datum.items() if k != "anacal_data"}
+
+
 class LensingRotateFlipTransform(torch.nn.Module):
     def __init__(self, without_replacement=False):
         super().__init__()

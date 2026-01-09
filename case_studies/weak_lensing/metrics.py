@@ -39,30 +39,50 @@ class WeakLensingMetrics(Metric):
         self.add_state("total", default=torch.zeros(num_redshift_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching) -> None:
-        true_shear1 = true_cat["shear_1"].flatten(1, 2)
-        true_shear2 = true_cat["shear_2"].flatten(1, 2)
-        pred_shear1 = est_cat["shear_1"].flatten(1, 2)
-        pred_shear2 = est_cat["shear_2"].flatten(1, 2)
+        true_shear1 = true_cat["shear_1"]
+        true_shear2 = true_cat["shear_2"]
+        pred_shear1 = est_cat["shear_1"]
+        pred_shear2 = est_cat["shear_2"]
+
+        # Handle both (batch, h, w, dim) and (batch, dim) formats
+        if true_shear1.dim() == 4:
+            true_shear1 = true_shear1.flatten(1, 2)
+            true_shear2 = true_shear2.flatten(1, 2)
+            pred_shear1 = pred_shear1.flatten(1, 2)
+            pred_shear2 = pred_shear2.flatten(1, 2)
+        elif true_shear1.dim() == 2:
+            true_shear1 = true_shear1.unsqueeze(1)
+            true_shear2 = true_shear2.unsqueeze(1)
+            pred_shear1 = pred_shear1.unsqueeze(1)
+            pred_shear2 = pred_shear2.unsqueeze(1)
+
         zero_baseline_pred_shear1 = torch.zeros_like(true_shear1)
         zero_baseline_pred_shear2 = torch.zeros_like(true_shear2)
 
         if "ellip_lsst_wavg" not in est_cat:
-            ellip_baseline_pred_shear1 = torch.zeros_like(est_cat["shear_1"]).flatten(1, 2)
-            ellip_baseline_pred_shear2 = torch.zeros_like(est_cat["shear_2"]).flatten(1, 2)
+            ellip_baseline_pred_shear1 = torch.zeros_like(pred_shear1)
+            ellip_baseline_pred_shear2 = torch.zeros_like(pred_shear2)
         else:
-            ellip_baseline_pred_shear1 = (
-                true_cat["ellip_lsst_wavg"][..., 0].unsqueeze(-1).flatten(1, 2)
-            )
-            ellip_baseline_pred_shear2 = (
-                true_cat["ellip_lsst_wavg"][..., 1].unsqueeze(-1).flatten(1, 2)
-            )
+            ellip = true_cat["ellip_lsst_wavg"]
+            if ellip.dim() == 4:
+                ellip_baseline_pred_shear1 = ellip[..., 0].unsqueeze(-1).flatten(1, 2)
+                ellip_baseline_pred_shear2 = ellip[..., 1].unsqueeze(-1).flatten(1, 2)
+            else:
+                ellip_baseline_pred_shear1 = ellip[..., 0].unsqueeze(-1).unsqueeze(1)
+                ellip_baseline_pred_shear2 = ellip[..., 1].unsqueeze(-1).unsqueeze(1)
 
         if "convergence" not in est_cat:
-            true_convergence = torch.zeros_like(true_shear1).flatten(1, 2)
-            pred_convergence = torch.zeros_like(true_convergence)
+            true_convergence = torch.zeros_like(true_shear1)
+            pred_convergence = torch.zeros_like(true_shear1)
         else:
-            true_convergence = true_cat["convergence"].flatten(1, 2)
-            pred_convergence = est_cat["convergence"].flatten(1, 2)
+            true_convergence = true_cat["convergence"]
+            pred_convergence = est_cat["convergence"]
+            if true_convergence.dim() == 4:
+                true_convergence = true_convergence.flatten(1, 2)
+                pred_convergence = pred_convergence.flatten(1, 2)
+            elif true_convergence.dim() == 2:
+                true_convergence = true_convergence.unsqueeze(1)
+                pred_convergence = pred_convergence.unsqueeze(1)
 
         shear1_sq_err = ((true_shear1 - pred_shear1) ** 2).sum([0, 1])
         zero_baseline_shear1_sq_err = ((true_shear1 - zero_baseline_pred_shear1) ** 2).sum([0, 1])

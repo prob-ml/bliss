@@ -1,0 +1,114 @@
+---
+defaults:
+    - _self_
+    - override hydra/job_logging: stdout
+
+# completely disable hydra logging
+# https://github.com/facebookresearch/hydra/issues/910
+hydra:
+    output_subdir: null
+    run:
+        dir: .
+
+paths:
+    cached_data: /nfs/turbo/lsa-regier/scratch/descwl/setting1
+    output: /home/twhit/bliss
+
+cached_simulator:
+    _target_: case_studies.weak_lensing.cached_dataset.CachedSimulatedDataModule
+    batch_size: 1
+    splits: 0:2000/2000:4000/4000:14000
+    splits_type: count
+    num_workers: 1
+    cached_data_path: ${paths.cached_data}
+    train_transforms:
+        - _target_: case_studies.weak_lensing.data_augmentation.RemoveAnacalData
+    nontrain_transforms:
+        - _target_: case_studies.weak_lensing.data_augmentation.RemoveAnacalData
+
+variational_factors:
+  - _target_: case_studies.weak_lensing.variational_dist.NormalFactor
+    name: shear_1
+    nll_gating: null
+  - _target_: case_studies.weak_lensing.variational_dist.NormalFactor
+    name: shear_2
+    nll_gating: null
+
+lensing_normalizers_nan:
+    nan:
+        _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
+
+lensing_metrics:
+    _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
+    num_redshift_bins: 1
+
+lensing_plots:
+    _target_: case_studies.weak_lensing.plots.WeakLensingPlots
+    frequency: 1
+    save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
+
+encoder:
+    _target_: case_studies.weak_lensing.encoder.ScalarShearEncoder
+    n_bands: 3
+    image_normalizers: ${lensing_normalizers_nan}
+    var_dist:
+        _target_: case_studies.weak_lensing.variational_dist.VariationalDist
+        tile_slen: 2048
+        factors: ${variational_factors}
+    optimizer_params:
+        lr: 1e-4
+    scheduler_params:
+        milestones: []
+        gamma: 1.0
+    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        metrics: ${lensing_metrics}
+    sample_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        metrics: ${lensing_metrics}
+    sample_image_renders:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        metrics: ${lensing_plots}
+
+mode: train
+
+train:
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        logger:
+            _target_: pytorch_lightning.loggers.TensorBoardLogger
+            save_dir: ${paths.output}
+            name: ResultsDescwl
+            version: ${now:%Y-%m-%d_%H-%M}
+            default_hp_metric: false
+        reload_dataloaders_every_n_epochs: 0
+        check_val_every_n_epoch: 1
+        log_every_n_steps: 10
+        max_epochs: 300
+        accelerator: gpu
+        devices: 1
+        precision: 32-true
+    callbacks:
+        checkpointing:
+            _target_: pytorch_lightning.callbacks.ModelCheckpoint
+            filename: "encoder_{epoch}"
+            save_top_k: 1
+            verbose: true
+            monitor: val/_loss
+            mode: min
+            save_on_train_epoch_end: false
+        early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
+            patience: 100
+    data_source: ${cached_simulator}
+    encoder: ${encoder}
+    seed: 123123
+    pretrained_weights: null
+    ckpt_path: null
+    matmul_precision: high
