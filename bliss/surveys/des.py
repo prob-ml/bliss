@@ -461,7 +461,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
 
         psf_params = np.zeros(len(DES_PSF.PARAM_NAMES))
         for i, param in enumerate(DES_PSF.PARAM_NAMES):
-            psf_params[i] = band_psfex_table_hdu.data[param]
+            psf_params[i] = band_psfex_table_hdu.data[param].item()
 
         return torch.tensor(psf_params, dtype=torch.float32)
 

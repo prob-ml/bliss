@@ -10,13 +10,14 @@ Bayesian Light Source Separator (BLISS)
 
 # Introduction
 
-BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides:
+Over the next decade, surveys like the Rubin Observatory's Legacy Survey of Space and Time (LSST) and the Euclid Space Telescope will produce petabytes of imaging data at unprecedented depth. Extracting scientific information from these images, with well-calibrated uncertainties, is a central computational challenge facing modern cosmology. We have entered an era of systematics-limited cosmology, where our understanding of the Universe is constrained more by systematic uncertainties than by data scarcity. In LSST images, over 60% of imaged sources will visually overlap (blending), and traditional pipelines discard faint objects through conservative flux cuts, excluding high-redshift galaxies that provide the greatest constraining power for dark energy.
+
+The BLISS project is an interdisciplinary collaboration between statisticians and physicists. BLISS (Bayesian Light Source Separator) is a Bayesian method for analyzing astronomical images from large cosmological surveys. BLISS provides:
   - __Accurate estimation__ of parameters in crowded fields with overlapping sources
   - __Calibrated uncertainties__ through fully Bayesian inference via neural posterior estimation (NPE)
   - __Scalability__ to petabyte-scale surveys containing billions of celestial objects
 
-BLISS uses neural posterior estimation (NPE), a form of simulation-based inference in which a neural network maps telescope images directly to an approximate Bayesian posterior. BLISS uses autoregressive tiling with checkerboard patterns that align the variational distribution's conditional dependencies with the true posterior, improving calibration.
-BLISS systematically outperforms standard survey pipelines for light source detection, flux measurement, star/galaxy classification, and galaxy shape measurement.
+BLISS uses neural posterior estimation (NPE), a form of simulation-based inference in which a neural network maps telescope images directly to an approximate Bayesian posterior. Unlike traditional MCMC samplers, which require expensive per-pixel likelihood evaluations and are intractable at survey scale, NPE amortizes the cost of inference: once trained on simulated data, the network performs posterior inference near-instantaneously. Autoregressive tiling with checkerboard patterns aligns the variational distribution's conditional dependencies with the true posterior, improving calibration. By propagating uncertainty through principled posterior distributions, BLISS enables astronomers to extract scientific information from the full depth of survey data, rather than only its brightest fraction. BLISS systematically outperforms standard survey pipelines for light source detection, flux measurement, star/galaxy classification, and galaxy shape measurement.
 
 # Installation
 
@@ -110,13 +111,15 @@ The `case_studies/` directory contains research applications of BLISS:
 
 # References
 
-Yicun Duan, Xinyue Li, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Collaboration. [Neural posterior estimation for cataloging astronomical images from the Legacy Survey of Space and Time](https://arxiv.org/abs/2510.15315). arXiv:2510.15315. 2025.
+Yicun Duan, Xinyue Li, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Science Collaboration. [Neural posterior estimation for cataloging astronomical images from the Legacy Survey of Space and Time](https://doi.org/10.3847/1538-3881/ae30df). The Astronomical Journal. 2026.
 
-Jeffrey Regier. [Neural posterior estimation with autoregressive tiling for detecting objects in astronomical images](https://arxiv.org/abs/2510.03074). arXiv:2510.03074. 2025.
+Jeffrey Regier. [Neural posterior estimation with autoregressive tiling for detecting objects in astronomical images](https://doi.org/10.1214/25-AOAS2125). Annals of Applied Statistics. 2026.
+
+Ismael Mendoza, Derek Hansen, Runjing Liu, Zhe Zhao, Ziteng Pang, Axel Guinot, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Science Collaboration. [Simulation-based inference for probabilistic galaxy detection and deblending](https://doi.org/10.33232/001c.158908). The Open Journal of Astrophysics. 2026.
 
 Aakash Patel, Tianqing Zhang, Camille Avestruz, Jeffrey Regier, and LSST Dark Energy Science Collaboration. [Neural posterior estimation for cataloging astronomical images with spatially varying backgrounds and point spread functions](https://iopscience.iop.org/article/10.3847/1538-3881/adef32). The Astronomical Journal. 2025.
 
-Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. [Variational inference for deblending crowded starfields](https://www.jmlr.org/papers/volume24/21-0169/21-0169.pdf). Journal of Machine Learning Research. 2023.
+Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and LSST Dark Energy Science Collaboration. [Variational inference for deblending crowded starfields](https://www.jmlr.org/papers/volume24/21-0169/21-0169.pdf). Journal of Machine Learning Research. 2023.
 
 Mallory Wang, Ismael Mendoza, Cheng Wang, Camille Avestruz, and Jeffrey Regier. [Statistical inference for coadded astronomical images](https://ml4physicalsciences.github.io/2022/files/NeurIPS_ML4PS_2022_167.pdf). NeurIPS Workshop on Machine Learning and the Physical Sciences. 2022.
 
