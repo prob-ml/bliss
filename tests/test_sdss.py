@@ -26,4 +26,4 @@ class TestSDSS:
         sdss_obj = instantiate(cfg.surveys.sdss, load_image_data=True)
         sdss_obj.prepare_data()
         frame0 = sdss_obj[0]
-        assert frame0["image"].shape == (5, 1489, 2048)
+        assert frame0["image"].shape == (5, 256, 320)
