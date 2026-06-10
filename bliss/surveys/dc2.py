@@ -319,8 +319,6 @@ class DC2DataModule(CachedSimulatedDataModule):
 class DC2FullCatalog(FullCatalog):
     @classmethod
     def from_file(cls, cat_path, wcs, height, width, **kwargs):
-        # load catalog from either a string path or a Path
-
         cat_path = Path(cat_path)
         suffix = cat_path.suffix.lower()
 
@@ -331,53 +329,51 @@ class DC2FullCatalog(FullCatalog):
         else:
             raise ValueError(f"Unsupported catalog file format: {suffix}")
 
-        flux_r_band = catalog["flux_r"].values
-        catalog = catalog.loc[flux_r_band > kwargs["catalog_min_r_flux"]]
+        catalog = catalog.loc[catalog["flux_r"].values > kwargs["catalog_min_r_flux"]]
 
-        objid = torch.tensor(catalog["id"].values)
-        match_id = torch.tensor(catalog["match_objectId"].values)
-        ra = torch.tensor(catalog["ra"].values)
-        dec = torch.tensor(catalog["dec"].values)
-        plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
-        truth_type = torch.tensor(catalog["truth_type"].values)
+        col_names = (
+            "id",
+            "match_objectId",
+            "ra",
+            "dec",
+            "truth_type",
+            "blendedness",
+            "shear_1",
+            "shear_2",
+            "ellipticity_1_true",
+            "ellipticity_2_true",
+            "cosmodc2_mask",
+            "redshifts",
+        )
+        cols = {name: torch.tensor(catalog[name].values) for name in col_names}
+
+        plocs = cls.plocs_from_ra_dec(cols["ra"], cols["dec"], wcs).squeeze(0)
+        truth_type = cols["truth_type"]
         star_galaxy_filter = (truth_type == 1) | (truth_type == 2)
         # we ignore the supernova
         source_type = torch.where(truth_type == 2, SourceType.STAR, SourceType.GALAXY)
         fluxes, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
-        blendedness = torch.tensor(catalog["blendedness"].values)
-        shear1 = torch.tensor(catalog["shear_1"].values)
-        shear2 = torch.tensor(catalog["shear_2"].values)
-        shear = torch.stack((shear1, shear2), dim=-1)
-        ellipticity1 = torch.tensor(catalog["ellipticity_1_true"].values)
-        ellipticity2 = torch.tensor(catalog["ellipticity_2_true"].values)
-        ellipticity = torch.stack((ellipticity1, ellipticity2), dim=-1)
-        cosmodc2_mask = torch.tensor(catalog["cosmodc2_mask"].values)
-        redshifts = torch.tensor(catalog["redshifts"].values)
+        shear = torch.stack((cols["shear_1"], cols["shear_2"]), dim=-1)
+        ellipticity = torch.stack((cols["ellipticity_1_true"], cols["ellipticity_2_true"]), dim=-1)
 
-        ori_len = len(catalog)
+        plocs_start_point = torch.tensor([0.0, 0.0])
+        plocs_end_point = torch.tensor([height, width])
+        in_bounds = ((plocs > plocs_start_point) & (plocs < plocs_end_point)).all(dim=-1)
+        keep = star_galaxy_filter & in_bounds
+
+        nobj = int(keep.sum())
         d = {
-            "objid": objid.view(1, ori_len, 1),
-            "source_type": source_type.view(1, ori_len, 1),
-            "plocs": plocs.view(1, ori_len, 2),
-            "redshifts": redshifts.view(1, ori_len, 1),
-            "fluxes": fluxes.view(1, ori_len, kwargs["n_bands"]),
-            "blendedness": blendedness.view(1, ori_len, 1),
-            "shear": shear.view(1, ori_len, 2),
-            "ellipticity": ellipticity.view(1, ori_len, 2),
-            "cosmodc2_mask": cosmodc2_mask.view(1, ori_len, 1),
+            "objid": cols["id"][keep].view(1, nobj, 1),
+            "source_type": source_type[keep].view(1, nobj, 1),
+            "plocs": plocs[keep].view(1, nobj, 2),
+            "redshifts": cols["redshifts"][keep].view(1, nobj, 1),
+            "fluxes": fluxes[keep].view(1, nobj, kwargs["n_bands"]),
+            "blendedness": cols["blendedness"][keep].view(1, nobj, 1),
+            "shear": shear[keep].view(1, nobj, 2),
+            "ellipticity": ellipticity[keep].view(1, nobj, 2),
+            "cosmodc2_mask": cols["cosmodc2_mask"][keep].view(1, nobj, 1),
         }
-
-        for k, v in d.items():
-            d[k] = v[:, star_galaxy_filter, :]
-        match_id = match_id[star_galaxy_filter]
-
-        plocs_start_point = torch.tensor([0.0, 0.0]).view(1, 1, -1)
-        plocs_end_point = torch.tensor([height, width]).view(1, 1, -1)
-        plocs_mask = ((d["plocs"] > plocs_start_point) & (d["plocs"] < plocs_end_point)).all(dim=-1)
-        plocs_mask = plocs_mask.squeeze(0)
-        for k, v in d.items():
-            d[k] = v[:, plocs_mask, :]
-        match_id = match_id[plocs_mask]
+        match_id = cols["match_objectId"][keep]
 
         cosmodc2_mask = rearrange(d["cosmodc2_mask"], "1 nobj 1 -> nobj")
         shear = d["shear"]
@@ -391,27 +387,16 @@ class DC2FullCatalog(FullCatalog):
             and torch.isnan(ellipticity[:, ~cosmodc2_mask, :]).all()
         )
 
-        nobj = d["source_type"].shape[1]
         d["n_sources"] = torch.tensor((nobj,))
 
         return cls(height, width, d), psf_params, match_id
 
     @classmethod
-    def get_bands_flux_and_psf(cls, bands, catalog, median=True):
-        flux_list = []
-        psf_params_list = []
-        for b in bands:
-            flux_list.append(torch.tensor((catalog[f"flux_{b}"]).values))
-            psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
-            psf_params_cur_band = []
-            for i in psf_params_name:
-                if median:
-                    median_psf = np.nanmedian((catalog[f"{i}{b}"]).values).astype(np.float32)
-                    psf_params_cur_band.append(median_psf)
-                else:
-                    psf_params_cur_band.append(catalog[f"{i}{b}"].values.astype(np.float32))
-            psf_params_list.append(
-                torch.tensor(np.array(psf_params_cur_band))
-            )  # bands x 4 (params per band) x n_obj
-
-        return torch.stack(flux_list).t(), torch.stack(psf_params_list).unsqueeze(0)
+    def get_bands_flux_and_psf(cls, bands, catalog):
+        psf_prefixes = ("IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_")
+        fluxes = torch.tensor(catalog[[f"flux_{b}" for b in bands]].values)
+        psf_cols = [f"{p}{b}" for b in bands for p in psf_prefixes]
+        psf_vals = catalog[psf_cols].values.T.reshape(len(bands), len(psf_prefixes), -1)
+        median_psf = np.nanmedian(psf_vals, axis=-1).astype(np.float32)
+        psf_params = torch.tensor(median_psf).unsqueeze(0)
+        return fluxes, psf_params
