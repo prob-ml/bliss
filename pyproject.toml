@@ -41,7 +41,7 @@ explicit = true
 torch = [{index = "pytorch-cu128"}]
 torchvision = [{index = "pytorch-cu128"}]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "Sphinx>=4.0.2",
     "git-lfs>=1.6",
@@ -99,6 +99,7 @@ filterwarnings = [
   "ignore:.*Detected call of `lr_scheduler.step()` before `optimizer.step()`.*:UserWarning",
   "ignore:.*AMP with fp16 is not supported on CPU.*:UserWarning",
   "ignore:.*This process.*is multi-threaded, use of fork.*may lead to deadlocks.*:DeprecationWarning",
+  "ignore:.*isinstance.*LeafSpec.*is deprecated.*:FutureWarning",
 ]
 minversion = "6.0"
 testpaths = [

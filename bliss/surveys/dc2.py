@@ -334,26 +334,26 @@ class DC2FullCatalog(FullCatalog):
         flux_r_band = catalog["flux_r"].values
         catalog = catalog.loc[flux_r_band > kwargs["catalog_min_r_flux"]]
 
-        objid = torch.from_numpy(catalog["id"].values)
-        match_id = torch.from_numpy(catalog["match_objectId"].values)
-        ra = torch.from_numpy(catalog["ra"].values)
-        dec = torch.from_numpy(catalog["dec"].values)
+        objid = torch.tensor(catalog["id"].values)
+        match_id = torch.tensor(catalog["match_objectId"].values)
+        ra = torch.tensor(catalog["ra"].values)
+        dec = torch.tensor(catalog["dec"].values)
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
-        galaxy_bools = torch.from_numpy((catalog["truth_type"] == 1).values)
-        star_bools = torch.from_numpy((catalog["truth_type"] == 2).values)
-        source_type = torch.from_numpy(catalog["truth_type"].values)
+        galaxy_bools = torch.tensor((catalog["truth_type"] == 1).values)
+        star_bools = torch.tensor((catalog["truth_type"] == 2).values)
+        source_type = torch.tensor(catalog["truth_type"].values)
         # we ignore the supernova
         source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
         fluxes, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
-        blendedness = torch.from_numpy(catalog["blendedness"].values)
-        shear1 = torch.from_numpy(catalog["shear_1"].values)
-        shear2 = torch.from_numpy(catalog["shear_2"].values)
+        blendedness = torch.tensor(catalog["blendedness"].values)
+        shear1 = torch.tensor(catalog["shear_1"].values)
+        shear2 = torch.tensor(catalog["shear_2"].values)
         shear = torch.stack((shear1, shear2), dim=-1)
-        ellipticity1 = torch.from_numpy(catalog["ellipticity_1_true"].values)
-        ellipticity2 = torch.from_numpy(catalog["ellipticity_2_true"].values)
+        ellipticity1 = torch.tensor(catalog["ellipticity_1_true"].values)
+        ellipticity2 = torch.tensor(catalog["ellipticity_2_true"].values)
         ellipticity = torch.stack((ellipticity1, ellipticity2), dim=-1)
-        cosmodc2_mask = torch.from_numpy(catalog["cosmodc2_mask"].values)
-        redshifts = torch.from_numpy(catalog["redshifts"].values)
+        cosmodc2_mask = torch.tensor(catalog["cosmodc2_mask"].values)
+        redshifts = torch.tensor(catalog["redshifts"].values)
 
         ori_len = len(catalog)
         d = {
@@ -403,7 +403,7 @@ class DC2FullCatalog(FullCatalog):
         flux_list = []
         psf_params_list = []
         for b in bands:
-            flux_list.append(torch.from_numpy((catalog[f"flux_{b}"]).values))
+            flux_list.append(torch.tensor((catalog[f"flux_{b}"]).values))
             psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
             psf_params_cur_band = []
             for i in psf_params_name:
