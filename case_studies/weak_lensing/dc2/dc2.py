@@ -404,18 +404,18 @@ class LensingDC2Catalog:
         """Read and process catalog from pickle file."""
         catalog = pd.read_pickle(cat_path)
 
-        galid = torch.from_numpy(catalog["galaxy_id"].values)
-        ra = torch.from_numpy(catalog["ra"].values)
-        dec = torch.from_numpy(catalog["dec"].values)
+        galid = torch.tensor(catalog["galaxy_id"].values)
+        ra = torch.tensor(catalog["ra"].values)
+        dec = torch.tensor(catalog["dec"].values)
 
-        shear1 = torch.from_numpy(catalog["shear_1"].values)
-        shear2 = torch.from_numpy(catalog["shear_2"].values)
+        shear1 = torch.tensor(catalog["shear_1"].values)
+        shear2 = torch.tensor(catalog["shear_2"].values)
         complex_shear = shear1 + shear2 * 1j
-        convergence = torch.from_numpy(catalog["convergence"].values)
+        convergence = torch.tensor(catalog["convergence"].values)
         reduced_shear = complex_shear / (1.0 - convergence)
 
-        ellip1_intrinsic = torch.from_numpy(catalog["ellipticity_1_true_dc2"].values)
-        ellip2_intrinsic = torch.from_numpy(catalog["ellipticity_2_true_dc2"].values)
+        ellip1_intrinsic = torch.tensor(catalog["ellipticity_1_true_dc2"].values)
+        ellip2_intrinsic = torch.tensor(catalog["ellipticity_2_true_dc2"].values)
         complex_ellip_intrinsic = ellip1_intrinsic + ellip2_intrinsic * 1j
         complex_ellip_lensed = (complex_ellip_intrinsic + reduced_shear) / (
             1.0 + reduced_shear.conj() * complex_ellip_intrinsic
@@ -423,14 +423,14 @@ class LensingDC2Catalog:
         ellip1_lensed = torch.view_as_real(complex_ellip_lensed)[..., 0]
         ellip2_lensed = torch.view_as_real(complex_ellip_lensed)[..., 1]
 
-        ixx = torch.from_numpy(catalog["Iyy_pixel"].values)  # align coordinate system
-        iyy = torch.from_numpy(catalog["Ixx_pixel"].values)  # align coordinate system
-        ixy = torch.from_numpy(catalog["Ixy_pixel"].values)
+        ixx = torch.tensor(catalog["Iyy_pixel"].values)  # align coordinate system
+        iyy = torch.tensor(catalog["Ixx_pixel"].values)  # align coordinate system
+        ixy = torch.tensor(catalog["Ixy_pixel"].values)
         ellip_lsst = (ixx - iyy + 2j * ixy) / (ixx + iyy + 2 * np.sqrt(ixx * iyy - (ixy**2)))
         ellip1_lsst = torch.view_as_real(ellip_lsst)[..., 0]
         ellip2_lsst = torch.view_as_real(ellip_lsst)[..., 1]
 
-        redshift = torch.from_numpy(catalog["redshift"].values)
+        redshift = torch.tensor(catalog["redshift"].values)
 
         _, psf_params = get_bands_flux_and_psf(kwargs["bands"], catalog, median=False)
 

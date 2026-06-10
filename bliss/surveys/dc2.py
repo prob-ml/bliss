@@ -339,11 +339,10 @@ class DC2FullCatalog(FullCatalog):
         ra = torch.tensor(catalog["ra"].values)
         dec = torch.tensor(catalog["dec"].values)
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
-        galaxy_bools = torch.tensor((catalog["truth_type"] == 1).values)
-        star_bools = torch.tensor((catalog["truth_type"] == 2).values)
-        source_type = torch.tensor(catalog["truth_type"].values)
+        truth_type = torch.tensor(catalog["truth_type"].values)
+        star_galaxy_filter = (truth_type == 1) | (truth_type == 2)
         # we ignore the supernova
-        source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
+        source_type = torch.where(truth_type == 2, SourceType.STAR, SourceType.GALAXY)
         fluxes, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
         blendedness = torch.tensor(catalog["blendedness"].values)
         shear1 = torch.tensor(catalog["shear_1"].values)
@@ -368,7 +367,6 @@ class DC2FullCatalog(FullCatalog):
             "cosmodc2_mask": cosmodc2_mask.view(1, ori_len, 1),
         }
 
-        star_galaxy_filter = galaxy_bools | star_bools
         for k, v in d.items():
             d[k] = v[:, star_galaxy_filter, :]
         match_id = match_id[star_galaxy_filter]

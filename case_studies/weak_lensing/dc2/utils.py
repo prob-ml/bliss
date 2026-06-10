@@ -74,7 +74,7 @@ def get_bands_flux_and_psf(bands, catalog, median=True):
     flux_list = []
     psf_params_list = []
     for b in bands:
-        flux_list.append(torch.from_numpy((catalog[f"flux_{b}"]).values))
+        flux_list.append(torch.tensor((catalog[f"flux_{b}"]).values))
         psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
         psf_params_cur_band = []
         for i in psf_params_name:
