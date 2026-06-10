@@ -11,7 +11,12 @@ repos:
         entry: check-added-large-files
         language: python
         args:
-          - "--maxkb=15000"
+          - "--maxkb=500"
+      - id: nbstripout
+        name: nbstripout
+        entry: nbstripout
+        language: system
+        types: [jupyter]
       - id: check-merge-conflict
         name: check-merge-conflict
         entry: check-merge-conflict
