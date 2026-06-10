@@ -61,7 +61,7 @@ git clone git@github.com:prob-ml/bliss.git
 
 ```bash
 cd bliss
-uv sync --all-extras
+uv sync
 ```
 
 6. Activate the virtual environment:

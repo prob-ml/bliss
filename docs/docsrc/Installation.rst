@@ -30,7 +30,7 @@ Developer Installation
 
     git clone git@github.com:prob-ml/bliss.git
     cd bliss
-    uv sync --all-extras
+    uv sync
 
 5. Activate the virtual environment::
 
@@ -67,7 +67,7 @@ BLISS requires the following core packages:
 - **Astropy** (>=6.1.1): Astronomical utilities
 - **NumPy**, **SciPy**, **Matplotlib**: Scientific computing
 
-All dependencies are automatically installed via ``uv sync --all-extras``.
+All dependencies are automatically installed via ``uv sync``.
 
 Troubleshooting
 ###############
